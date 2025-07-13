@@ -1,0 +1,29 @@
+
+.auth-container {
+  max-width: 400px;
+  margin: 50px auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.input-field {
+  padding: 10px;
+  font-size: 16px;
+}
+
+.btn {
+  padding: 10px;
+  background: #444;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}
+
+.google-btn {
+  background: #db4437;
+}
+
+.line-btn {
+  background: #06c755;
+}
