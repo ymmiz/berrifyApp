@@ -1,42 +1,88 @@
 <template>
-  <div class="auth-container">
-    <h2>Welcome to BERRIFY!</h2>
+  <div class="app login-page">
+    <div class="form-container">
+      <!-- 🌸 Show form only when not loading -->
+      <div v-if="!isLoading">
+        <h1 class="welcome-text">Welcome to<br /><span>BERRIFY!</span></h1>
 
-    <input
-      v-model="email"
-      placeholder="Email"
-      type="email"
-      class="input-field"
-    />
+        <div class="form-card">
+          <div class="form-group">
+            <label for="email">Email</label>
+            <input
+              id="email"
+              type="email"
+              v-model="email"
+              placeholder="Enter your email"
+            />
+          </div>
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              v-model="password"
+              placeholder="Enter your password"
+            />
+          </div>
+          <button class="btn-main" @click="signInWithEmail">Sign In</button>
+          <a @click.prevent="goToForgotPassword" class="forgot-link">Forgot password?</a>
+        </div>
 
-    <input
-      v-model="password"
-      placeholder="Password"
-      type="password"
-      class="input-field"
-    />
+        <p class="signup-link">
+          Don't have an account?
+          <span @click="goToSignup">Sign Up</span>
+        </p>
 
-    <button @click="signInWithEmail" class="btn">Sign In</button>
-    <p>
-    <a @click="forgotPassword" href="#">Forgot password?</a>
-    </p>
+        <div class="social-buttons">
+          <button class="btn-social" @click="signInWithGoogle">Continue with Google</button>
+        </div>
+      </div>
 
-    <button @click="signInWithGoogle" class="btn google-btn">
-    Continue with Google
-    </button>
-
+      <!-- 🌸 Show flower loader only when loading -->
+      <div v-else class="flower">
+        <div class="petal petal1"></div>
+        <div class="petal petal2"></div>
+        <div class="petal petal3"></div>
+        <div class="petal petal4"></div>
+        <div class="petal petal5"></div>
+        <div class="petal petal6"></div>
+        <div class="petal petal7"></div>
+        <div class="petal petal8"></div>
+        <div class="center"></div>
+      </div>
+    </div>
   </div>
 </template>
 
-<script setup>
-import '../styles/auth.css'
+<script>
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useSignIn } from '../scripts/useSignIn.js'
+import '../styles/LoginPage.css'
 
-const {
-  email,
-  password,
-  signInWithEmail,
-  signInWithGoogle,
-  forgotPassword,
-} = useSignIn()
+export default {
+  setup() {
+    const router = useRouter()
+    const email = ref('')
+    const password = ref('')
+    const { isLoading, signInWithEmail, signInWithGoogle } = useSignIn(email, password)
+
+    const goToSignup = () => {
+      router.push('/')
+    }
+
+    const goToForgotPassword = () => {
+      router.push('/forgot-password')
+    }
+    return {
+      email,
+      password,
+      isLoading,
+      signInWithEmail,
+      goToSignup,
+      goToForgotPassword,
+      signInWithGoogle
+    }
+  }
+}
 </script>

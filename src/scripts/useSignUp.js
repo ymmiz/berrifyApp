@@ -1,7 +1,8 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { auth } from '../firebase'
+import { auth, db } from '../firebase'                       // ✅ get db
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore' // ✅ Firestore APIs
 
 export function useSignUp() {
   const name = ref('')
@@ -15,37 +16,34 @@ export function useSignUp() {
       alert('Please fill in all fields.')
       return
     }
-
     if (password.value !== confirmPassword.value) {
       alert('Passwords do not match.')
       return
     }
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        email.value,
-        password.value
-      )
+      const { user } = await createUserWithEmailAndPassword(auth, email.value, password.value)
 
-      // Update display name
-      await updateProfile(userCredential.user, {
-        displayName: name.value
+      // Keep them signed in, but also set their display name
+      await updateProfile(user, { displayName: name.value })
+
+      // ✅ Create users/{uid} in Firestore so they appear in your database
+      await setDoc(doc(db, 'users', user.uid), {
+        uid: user.uid,
+        name: name.value,
+        email: email.value.toLowerCase(),
+        role: 'user',
+        onboarded: false,
+        createdAt: serverTimestamp()
       })
 
       alert('Account created successfully!')
-      router.push('/signin')
+      router.push('/welcome')
     } catch (e) {
-      console.error(e.message)
-      alert(e.message)
+      console.error(e)
+      alert(e.message || 'Sign up failed')
     }
   }
 
-  return {
-    name,
-    email,
-    password,
-    confirmPassword,
-    signUp
-  }
+  return { name, email, password, confirmPassword, signUp }
 }

@@ -1,41 +1,66 @@
 <template>
-  <div class="auth-container">
-    <h2>Create Account</h2>
+  <div class="app signup-page">
+    <div class="form-container">
+      <h1 class="welcome-text">
+        Create Your<br /><span>BERRIFY</span> Account
+      </h1>
 
-    <input
-      v-model="name"
-      placeholder="Name"
-      type="text"
-      class="input-field"
-    />
+      <div class="form-card">
+        <!-- Use a form so Enter submits -->
+        <form @submit.prevent="signUp">
+          <div class="form-group">
+            <label for="name">Name</label>
+            <input
+              id="name"
+              v-model="name"
+              type="text"
+              placeholder="Enter your Name"
+              autocomplete="name"
+            />
+          </div>
 
-    <input
-      v-model="email"
-      placeholder="Email"
-      type="email"
-      class="input-field"
-    />
+          <div class="form-group">
+            <label for="email">Email</label>
+            <input
+              id="email"
+              v-model="email"
+              type="email"
+              placeholder="Enter your email"
+              autocomplete="email"
+            />
+          </div>
 
-    <input
-      v-model="password"
-      placeholder="Password"
-      type="password"
-      class="input-field"
-    />
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input
+              id="password"
+              v-model="password"
+              type="password"
+              placeholder="Create a password"
+              autocomplete="new-password"
+            />
+          </div>
 
-    <input
-      v-model="confirmPassword"
-      placeholder="Confirm Password"
-      type="password"
-      class="input-field"
-    />
+          <div class="form-group">
+            <label for="confirm-password">Confirm Password</label>
+            <input
+              id="confirm-password"
+              v-model="confirmPassword"
+              type="password"
+              placeholder="Confirm password"
+              autocomplete="new-password"
+            />
+          </div>
 
-    <button @click="signUp" class="btn">Sign Up</button>
+          <button class="btn-main" type="submit">Sign Up</button>
+        </form>
+      </div>
 
-    <p>
-      Already have an account?
-      <router-link to="/signin">Sign In</router-link>
-    </p>
+      <p class="login-link">
+        Already have an account?
+        <router-link to="/signin">Log In</router-link>
+      </p>
+    </div>
   </div>
 </template>
 

@@ -1,29 +1,448 @@
-
-.auth-container {
-  max-width: 400px;
-  margin: 50px auto;
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background: #8AB58A;
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
 }
 
-.input-field {
-  padding: 10px;
-  font-size: 16px;
+.app {
+  width: 100%;
+  max-width: 420px;
+  padding: 20px;
 }
 
-.btn {
-  padding: 10px;
-  background: #444;
-  color: #fff;
-  border: none;
+.signup-link {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.signup-link span {
+  cologin-pager: blue;
+  font-weight: bold;
   cursor: pointer;
 }
 
-.google-btn {
-  background: #db4437;
+
+.form-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-.line-btn {
-  background: #06c755;
+.welcome-text {
+  color: white;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.welcome-text span {
+  font-weight: 700;
+  font-size: 2.5rem;
+}
+
+.form-card {
+  background: white;
+  padding: 20px;
+  border-radius: 15px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  width: 100%;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  color: black;
+  font-weight: 500;
+}
+
+.form-group input {
+  width: 90%;
+  padding: 8px 12px;  
+  /* Adjusted padding: smaller vertical padding */
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  font-size: 1rem;
+}
+
+.btn-main {
+  width: 100%;
+  padding: 12px;
+  background: black;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.forgot-link {
+  display: block;
+  margin-top: 10px;
+  text-align: center;
+  color: black;
+  text-decoration: underline;
+  font-weight: 500;
+}
+
+.social-buttons {
+  width: 100%;
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.btn-social {
+  width: 100%;
+  padding: 12px;
+  background: white;
+  color: black;
+  border: none;
+  border-radius: 40px;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.danger-button{
+  background: red;
+  color: white;
+}
+
+.welcome-screen {
+  text-align: center;
+  padding: 20px;
+}
+
+.berry-image {
+  max-width: 200px;
+  margin: 20px auto;
+  display: block;
+}
+
+.description {
+  max-width: 300px;
+  margin: 0 auto 20px;
+  color: black;
+  font-weight: 500;
+  font-family: 'Courier New', monospace;
+}
+
+.option {
+  background: #f8f8f8;
+  padding: 16px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease;
+}
+
+.option:hover {
+  transform: scale(1.02);
+}
+
+.option i {
+  font-size: 32px;
+  margin-bottom: 10px;
+  display: block;
+  color: black;
+}
+
+.option strong {
+  display: block;
+  font-size: 1.2rem;
+  margin-bottom: 8px;
+}
+
+.option span {
+  font-size: 0.95rem;
+  color: #555;
+}
+
+.option {
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border 0.3s, background 0.3s;
+}
+
+.option.selected {
+  border: 2px solid #333;
+  background: #d3f9d8;
+}
+
+.menu-bar {
+  position: absolute;
+  top: 20px;
+  left: 20px; /* Changed from right to left */
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: -250px; /* Changed from right */
+  width: 250px;
+  height: 100%;
+  background: white;
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1); /* Shadow now on the right side */
+  padding: 20px;
+  transition: left 0.3s ease;
+  z-index: 1000;
+}
+
+.sidebar.open {
+  left: 0;
+}
+
+.diary-entry img {
+  width: 100px;  /* Smaller than before */
+  height: auto;
+}
+
+.calendar-card {
+  background: #f5e9d8;
+  padding: 20px;
+  border-radius: 24px;
+  margin-top: 20px;
+}
+
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.calendar-table {
+  width: 100%;
+  text-align: center;
+  border-collapse: collapse;
+}
+
+.calendar-table th {
+  font-weight: bold;
+}
+
+.calendar-table td {
+  padding: 8px;
+  border-radius: 50%;
+}
+
+.calendar-table .active-day {
+  background: #b0c4a7;
+}
+
+.back-button {
+  position: fixed;
+  top: 60px;
+  left: 20px;  /* Now on the left instead of right */
+  font-size: 24px;
+  cursor: pointer;
+  color: black;
+  z-index: 1100;
+}
+
+.tips-page {
+  background: #8AB58A;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.back-button {
+  position: fixed;
+  top: 60px;
+  left: 20px;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.cycle-card {
+  background: white;
+  padding: 20px;
+  border-radius: 24px;
+  margin-top: 80px;
+  text-align: center;
+}
+
+.cycle-card h2 {
+  color: #c0392b;
+  margin-bottom: 10px;
+}
+
+.cycle-card img {
+  width: 100%;
+  max-width: 400px;
+  margin-bottom: 20px;
+}
+
+.cycle-steps {
+  text-align: left;
+  list-style: none;
+  padding: 0;
+}
+
+.cycle-steps li {
+  margin-bottom: 10px;
+}
+
+.highlight {
+  color: #c0392b;
+  font-weight: bold;
+}
+
+.calendar-card.outlined {
+  border: 3px solid #007aff;
+  border-radius: 20px;
+}
+
+.diary-entry {
+  background: #f5e9d8;
+  padding: 20px;
+  margin-top: 20px;
+  border-radius: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+}
+
+.entry-content {
+  max-width: 60%;
+}
+
+.status-alert {
+  color: #d32f2f;
+  font-weight: bold;
+  margin-top: 5px;
+}
+
+.moisture {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.moisture i {
+  color: #007aff;
+  font-size: 20px;
+}
+
+.moisture-value {
+  font-weight: bold;
+  color: #007aff;
+}
+
+.moisture-label {
+  color: #444;
+  font-size: 0.95rem;
+}
+
+.diary-entry img {
+  width: 80px;
+  height: auto;
+}
+
+.basket-icon {
+  width: 80px;
+  height: auto;
+}
+
+.dropdown-icon {
+  position: absolute;
+  bottom: 12px;
+  right: 20px;
+  font-size: 16px;
+  color: #222;
+  cursor: pointer;
+}
+
+.plant-photo-container {
+  margin: 20px auto;
+  border-radius: 24px;
+  overflow: hidden;
+  width: 100%;
+  max-width: 500px;
+}
+
+.plant-photo {
+  width: 100%;
+  border-radius: 24px;
+}
+
+/* Smooth transition */
+.fade-enter-active,
+.fade-leave-active {
+  transition: all 0.3s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.setting-card {
+  background: #ddd;
+  padding: 20px;
+  border-radius: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 24px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  background-color: #ccc;
+  border-radius: 34px;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  transition: 0.4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.4s;
+}
+input:checked + .slider {
+  background-color: #4cd964;
+}
+
+input:checked + .slider:before {
+  transform: translateX(22px);
 }

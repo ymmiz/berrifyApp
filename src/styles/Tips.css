@@ -1,0 +1,259 @@
+/* Tips Component Styles */
+
+/* Base component styling */
+.tips {
+  position: relative;
+  padding: 20px;
+  padding-bottom: 80px; /* Space for bottom navigation */
+  min-height: 100vh;
+  background: #8ab58a;
+  color: black;
+}
+
+.tips h1 {
+  text-align: center;
+  font-size: 32px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 30px;
+}
+
+/* Strawberry Cycle Section */
+.cycle-card {
+  background: white;
+  border-radius: 20px;
+  padding: 32px;
+  margin-bottom: 30px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+.cycle-card h2 {
+  color: #333;
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.cycle-card img {
+  width: 100%;
+  max-width: 400px;
+  height: auto;
+  margin: 20px auto;
+  display: block;
+  border-radius: 16px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.cycle-steps {
+  list-style: none;
+  padding: 0;
+  margin-top: 24px;
+}
+
+.cycle-steps li {
+  margin-bottom: 16px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 12px;
+  border-left: 4px solid #4CAF50;
+  transition: all 0.3s ease;
+  color: #222 !important;
+  font-size: 18px;
+  font-weight: 500;
+  opacity: 1 !important;
+  visibility: visible !important;
+  z-index: 1;
+}
+
+.cycle-steps li:hover {
+  transform: translateX(4px);
+  box-shadow: 0 4px 15px rgba(76, 175, 80, 0.2);
+}
+
+.cycle-steps .highlight {
+  color: #4CAF50;
+  font-weight: 700;
+}
+
+/* Jam Recipe Section */
+.jam-card {
+  background: white;
+  border-radius: 20px;
+  padding: 32px;
+  margin-bottom: 30px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+.jam-card h2 {
+  color: #333;
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.jam-card img {
+  width: 100%;
+  max-width: 300px;
+  height: auto;
+  margin: 20px auto;
+  display: block;
+  border-radius: 16px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.recipe-text h3 {
+  color: #333;
+  font-size: 22px;
+  font-weight: 700;
+  margin: 24px 0 16px 0;
+}
+
+.recipe-text ul, .recipe-text ol {
+  padding-left: 20px;
+  line-height: 1.8;
+}
+
+.recipe-text li {
+  margin-bottom: 8px;
+  color: #555;
+  font-size: 16px;
+}
+
+/* Bottom Icon Navigation - Fixed for Tips page */
+.icon-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: white;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-radius: 25px;
+  position: relative;
+}
+
+.nav-item:hover {
+  background: #f0f0f0;
+  transform: scale(1.1);
+}
+
+/* Fix for Font Awesome icons */
+.nav-item i {
+  font-size: 20px !important;
+  color: #333 !important;
+  font-family: "Font Awesome 6 Free", "Font Awesome 6 Brands" !important;
+  font-weight: 900 !important;
+  display: inline-block !important;
+  line-height: 1 !important;
+  text-rendering: auto !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+}
+
+/* Fallback icons using Unicode characters */
+.nav-item .fa-home::before { 
+  content: "🏠" !important; 
+  font-family: system-ui, -apple-system, sans-serif !important;
+  font-size: 18px !important;
+}
+
+.nav-item .fa-list-ul::before { 
+  content: "📋" !important; 
+  font-family: system-ui, -apple-system, sans-serif !important;
+  font-size: 18px !important;
+}
+
+.nav-item .fa-seedling::before { 
+  content: "🌱" !important; 
+  font-family: system-ui, -apple-system, sans-serif !important;
+  font-size: 18px !important;
+}
+
+.nav-item .fa-cog::before { 
+  content: "⚙️" !important; 
+  font-family: system-ui, -apple-system, sans-serif !important;
+  font-size: 18px !important;
+}
+
+.nav-item .fa-user::before { 
+  content: "👤" !important; 
+  font-family: system-ui, -apple-system, sans-serif !important;
+  font-size: 18px !important;
+}
+
+/* Alternative: CSS-only icons without Font Awesome dependency */
+.nav-item.home-icon::before {
+  content: "⌂";
+  font-size: 24px;
+  color: #333;
+}
+
+.nav-item.tips-icon::before {
+  content: "☰";
+  font-size: 24px;
+  color: #333;
+}
+
+.nav-item.diary-icon::before {
+  content: "🌿";
+  font-size: 20px;
+  color: #333;
+}
+
+.nav-item.settings-icon::before {
+  content: "⚙";
+  font-size: 22px;
+  color: #333;
+}
+
+.nav-item.profile-icon::before {
+  content: "👤";
+  font-size: 20px;
+  color: #333;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+  .tips {
+    padding: 15px;
+    padding-bottom: 75px;
+  }
+  
+  .cycle-card, .jam-card {
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  
+  .cycle-card h2, .jam-card h2 {
+    font-size: 24px;
+  }
+  
+  .icon-nav {
+    height: 65px;
+  }
+  
+  .nav-item {
+    width: 45px;
+    height: 45px;
+  }
+  
+  .nav-item i, .nav-item::before {
+    font-size: 18px !important;
+  }
+}

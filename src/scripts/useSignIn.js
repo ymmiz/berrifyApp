@@ -1,81 +1,67 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { auth } from '../firebase'
-import {signInWithEmailAndPassword,GoogleAuthProvider,signInWithPopup} from 'firebase/auth'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
-import { db } from '../firebase' 
+import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 
-export function useSignIn() {
-  const email = ref('')
-  const password = ref('')
+export function useSignIn(emailRef, passwordRef) {
+  const isLoading = ref(false)
   const router = useRouter()
 
   const signInWithEmail = async () => {
+    const email = (emailRef.value || '').trim()
+    const password = passwordRef.value || ''
+
+    if (!email || !password) {
+      alert('Please enter both email and password.')
+      return
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      alert('Please enter a valid email address.')
+      return
+    }
+
     try {
-      await signInWithEmailAndPassword(auth, email.value, password.value)
-      
-      const docRef = doc(db, 'users', auth.currentUser.uid)
-      const docSnap = await getDoc(docRef)
+      isLoading.value = true
+      await signInWithEmailAndPassword(auth, email, password)
+      router.push('/home')
+    } catch (e) {
+      console.error('Firebase sign-in error:', e)
+      handleFirebaseError(e)
+    } finally {
+      isLoading.value = false
+    }
+  }
 
-      if (docSnap.exists()) {
-        const userData = docSnap.data()
-        if (!userData.user_type) {
-          router.push('/select-user-type')
-        } else {
-          router.push('/profile')
-        }
-      } else {
-        await setDoc(docRef, {
-          name: auth.currentUser.displayName || "",
-          email: auth.currentUser.email,
-          user_type: null,
-          join_date: new Date()
-        })
-        router.push('/select-user-type')
-      }
-
+  const signInWithGoogle = async () => {
+    try {
+      isLoading.value = true
+      const provider = new GoogleAuthProvider()
+      await signInWithPopup(auth, provider)
+      router.push('/home')
     } catch (e) {
       console.error(e)
       alert(e.message)
+    } finally {
+      isLoading.value = false
     }
   }
-  const signInWithGoogle = async () => {
-    try {
-        const provider = new GoogleAuthProvider()
-        await signInWithPopup(auth, provider)
-        
-        const docRef = doc(db, 'users', auth.currentUser.uid)
-        const docSnap = await getDoc(docRef)
 
-        if (docSnap.exists()) {
-          const userData = docSnap.data()
-          if (!userData.user_type) {
-            router.push('/select-user-type')
-          } else {
-            router.push('/profile')
-          }
-        } else {
-          await setDoc(docRef, {
-            name: auth.currentUser.displayName || "",
-            email: auth.currentUser.email,
-            user_type: null,
-            join_date: new Date()
-          })
-          router.push('/select-user-type')
-        }
-      } catch (e) {
-        console.error(e.message)
-        alert(e.message)
-      }
-  }
   const forgotPassword = () => {
-  alert('Redirect to password reset page (implement separately)')
+    alert('Redirect to password reset page (implement separately)')
   }
-  return {
-    email,
-    password,
-    signInWithEmail,
-    signInWithGoogle,
-    forgotPassword,
+
+  return { isLoading, signInWithEmail, signInWithGoogle, forgotPassword }
+}
+
+function handleFirebaseError(e) {
+  const code = e.code
+  switch (code) {
+    case 'auth/invalid-email': alert('Invalid email format.'); break
+    case 'auth/user-not-found': alert('No user found with this email.'); break
+    case 'auth/wrong-password': alert('Incorrect password.'); break
+    case 'auth/too-many-requests': alert('Too many failed attempts. Please try again later.'); break
+    default: alert('Login failed: ' + e.message)
   }
 }

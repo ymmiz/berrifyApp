@@ -30,12 +30,20 @@ export default function useUserTypeSelect() {
 
   const selectType = async (type) => {
     const user = auth.currentUser
-    if (user) {
-      const userRef = doc(db, 'users', user.uid)
-      await updateDoc(userRef, {
-        user_type: type
-      })
-      router.push('/profile') // or wherever you want to go next
+    if (!user) {
+      alert('Not logged in!')
+      return
+    }
+
+    const userRef = doc(db, 'users', user.uid)
+    await updateDoc(userRef, {
+      user_type: type
+    })
+
+    if (type === 'phone' || type === 'both') {
+      router.push('/line-login')
+    } else {
+      router.push('/profile')
     }
   }
 
@@ -48,13 +56,15 @@ export default function useUserTypeSelect() {
       }
 
       const userRef = doc(db, 'users', user.uid)
-
       await updateDoc(userRef, {
         user_type: selectedType.value
       })
 
-      alert(`Saved user type: ${selectedType.value}`)
-      router.push('/')
+      if (selectedType.value === 'phone' || selectedType.value === 'both') {
+        router.push('/line-login')
+      } else {
+        router.push('/profile')
+      }
     } catch (e) {
       console.error(e)
       alert('Failed to save user type.')

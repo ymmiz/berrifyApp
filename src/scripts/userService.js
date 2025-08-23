@@ -7,6 +7,14 @@ import {
   serverTimestamp
 } from 'firebase/firestore'
 import { auth, db } from '../firebase'
+import { deleteField } from "firebase/firestore";
+
+// Example function to remove 'onboarded' field from a user document
+export const removeOnboardedField = async (userId) => {
+  await updateDoc(doc(db, "users", userId), {
+    onboarded: deleteField()
+  });
+};
 
 // ✅ CREATE user if not exists
 export const createUserIfNotExists = async () => {
