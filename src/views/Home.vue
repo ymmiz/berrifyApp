@@ -44,7 +44,7 @@
           <i class="bi bi-list-ul"></i>
         </div>
         <div class="nav-item" @click="$router.push('/mydiary')">
-          <i class="bi bi-tree-fill"></i>
+          <span class="emoji">🌱</span>
         </div>
         <div class="nav-item" @click="$router.push('/setting')">
           <i class="bi bi-gear-fill"></i>

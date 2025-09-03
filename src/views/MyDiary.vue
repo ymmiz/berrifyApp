@@ -67,19 +67,43 @@
               <p>{{ plant.status || 'Not yet scanned' }}</p>
               <p class="status-alert">{{ plant.statusAlert || 'Scan to check status' }}</p>
 
-              <div class="moisture">
+             <!-- Only show soil moisture for hardware plants -->
+              <div
+                v-if="plant.mode === 'hardware' && plant.moisture !== null && plant.moisture !== undefined"
+                class="moisture"
+              >
                 <i class="bi bi-droplet"></i>
-                <span class="moisture-value">{{ plant.moisture !== null ? plant.moisture : '--' }}%</span>
+                <span class="moisture-value">{{ plant.moisture }}%</span>
                 <span class="moisture-label">Soil Moisture</span>
+              </div>
+              <!-- Action Buttons -->
+              <div class="plant-actions">
+                <!-- View Photos Button -->
+                <button class="view-photos-btn" @click="viewPlantPhotos(plant)">
+                  <i class="bi bi-eye-fill"></i>
+                  View Photos
+                </button>
               </div>
 
               <!-- Action Buttons (placeholder) -->
               <div class="plant-actions">
-                <button class="scan-btn" @click="scanPlant(plant)">
-                  <i class="bi bi-qr-code-scan"></i>
-                  Scan Now
-                </button>
-                <button class="moisture-btn" @click="measurePlantSoilMoisture(plant)">
+                <router-link
+                  v-if="plant.mode === 'hardware'"
+                  class="scan-btn"
+                  :to="{ name:'HardwareAnalysis', query:{ plantId: plant.id, plantName: plant.name } }">
+                  <i class="bi bi-qr-code-scan"></i> Scan Now
+                </router-link>
+                <router-link
+                  v-else
+                  class="scan-btn"
+                  :to="{ name:'PlantScan', query:{ plantId: plant.id, plantName: plant.name } }">
+                  <i class="bi bi-qr-code-scan"></i> Scan Now
+                </router-link>
+               <button
+                  v-if="plant.mode === 'hardware'"
+                  class="moisture-btn"
+                  @click="measurePlantSoilMoisture(plant)"
+                >
                   <i class="bi bi-droplet"></i>
                   Soil Moisture
                 </button>
@@ -202,6 +226,7 @@ import {
   getPlants,
   updatePlant,
   deletePlant,
+  deletePlantCascade,
   getNextPlantNumber,
   createPlantData,
   getPlantById,
@@ -313,14 +338,16 @@ export default {
     async removePlant(plantId) {
       const plant = this.plants.find(p => p.id === plantId)
       if (!plant) return
-      if (!confirm(`Are you sure you want to remove "${plant.name}"?`)) return
-
+      
+      if (!confirm(`Are you sure you want to remove "${plant.name}"? This will delete all associated data including diary entries and uploads.`)) return
+      
       try {
-        await deletePlant(plantId)
+        // ✅ Use cascade delete instead of regular delete
+        await deletePlantCascade(plantId) // Changed from deletePlant to deletePlantCascade
         await this.loadPlants()
-        console.log(`Removed plant: ${plant.name}`)
+        console.log(`✅ Completely removed plant and all data: ${plant.name}`)
       } catch (error) {
-        console.error('Failed to remove plant:', error)
+        console.error('❌ Failed to remove plant:', error)
         alert('Failed to remove plant. Please try again.')
       }
     },
@@ -336,6 +363,17 @@ export default {
         console.error('Failed to toggle plant expansion:', error)
       }
     },
+        viewPlantPhotos(plant) {
+      this.$router.push({
+        path: '/photolist',
+        query: {
+          plantId: plant.id,
+          plantName: plant.name,
+          mode: plant.mode || 'phone'
+        }
+      })
+    },
+
     goToToday() {
       const today = new Date()
       const todayString = today.toISOString().split('T')[0]
@@ -360,9 +398,6 @@ export default {
     },
     onViewChange(view) {
       console.log('Calendar view changed:', view)
-    },
-    scanPlant(plant) {
-      alert(`Scan feature coming soon!\n\nPlant: ${plant.name}\nMode: ${plant.mode}`)
     },
     harvestPlant(plant) {
       alert(`Harvest feature coming soon!\n\nPlant: ${plant.name}`)

@@ -42,25 +42,24 @@ export const createUserIfNotExists = async () => {
   }
 }
 
-// ✅ READ current user data
-export const getUserData = async () => {
+export const getUserData = async (uid) => {
   const user = auth.currentUser
   if (!user) return null
-
-  const userRef = doc(db, "users", user.uid)
+  
+  const userId = uid || user.uid  // Use provided uid or fallback to current user
+  const userRef = doc(db, "users", userId)
   const userSnap = await getDoc(userRef)
-
   return userSnap.exists() ? userSnap.data() : null
 }
 
 // ✅ UPDATE current user data
-export const updateUserData = async (data) => {
+export const updateUserData = async (uid, data) => {
   const user = auth.currentUser
   if (!user) return
-
-  const userRef = doc(db, "users", user.uid)
+  
+  const userId = uid || user.uid  // Use provided uid or fallback to current user
+  const userRef = doc(db, "users", userId)
   await updateDoc(userRef, data)
-
   console.log("✅ User data updated.")
 }
 
