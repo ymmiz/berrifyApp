@@ -1,14 +1,16 @@
+// src/scripts/useSignUp.js
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { auth, db } from '../firebase'                       // ✅ get db
+import { auth, db } from '../firebase'
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore' // ✅ Firestore APIs
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 
 export function useSignUp() {
   const name = ref('')
   const email = ref('')
   const password = ref('')
   const confirmPassword = ref('')
+  const loading = ref(false)
   const router = useRouter()
 
   const signUp = async () => {
@@ -21,17 +23,19 @@ export function useSignUp() {
       return
     }
 
-    try {
-      const { user } = await createUserWithEmailAndPassword(auth, email.value, password.value)
+    const normalizedEmail = email.value.trim().toLowerCase()
 
-      // Keep them signed in, but also set their display name
+    try {
+      loading.value = true
+
+      const { user } = await createUserWithEmailAndPassword(auth, normalizedEmail, password.value)
+
       await updateProfile(user, { displayName: name.value })
 
-      // ✅ Create users/{uid} in Firestore so they appear in your database
       await setDoc(doc(db, 'users', user.uid), {
         uid: user.uid,
         name: name.value,
-        email: email.value.toLowerCase(),
+        email: normalizedEmail,
         role: 'user',
         onboarded: false,
         createdAt: serverTimestamp()
@@ -41,9 +45,22 @@ export function useSignUp() {
       router.push('/welcome')
     } catch (e) {
       console.error(e)
-      alert(e.message || 'Sign up failed')
+      const code = e?.code || ''
+      if (code === 'auth/email-already-in-use') {
+        alert('This email is already registered. Please log in instead.')
+        // Pass the email to the sign-in page so you can prefill it there
+        router.push({ path: '/signin', query: { email: normalizedEmail } })
+      } else if (code === 'auth/weak-password') {
+        alert('Password is too weak. Use at least 6 characters.')
+      } else if (code === 'auth/invalid-email') {
+        alert('Please enter a valid email address.')
+      } else {
+        alert('Sign up failed. Please try again.')
+      }
+    } finally {
+      loading.value = false
     }
   }
 
-  return { name, email, password, confirmPassword, signUp }
+  return { name, email, password, confirmPassword, signUp, loading }
 }

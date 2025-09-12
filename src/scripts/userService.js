@@ -1,84 +1,141 @@
+// src/scripts/userService.js
 import {
   doc,
   getDoc,
   setDoc,
   updateDoc,
   deleteDoc,
-  serverTimestamp
+  serverTimestamp,
+  arrayUnion,
+  arrayRemove,
+  deleteField,
 } from 'firebase/firestore'
 import { auth, db } from '../firebase'
-import { deleteField } from "firebase/firestore";
 
-// Example function to remove 'onboarded' field from a user document
-export const removeOnboardedField = async (userId) => {
-  await updateDoc(doc(db, "users", userId), {
-    onboarded: deleteField()
-  });
-};
+/* ------------------------------------------------------------------ */
+/* Utilities                                                          */
+/* ------------------------------------------------------------------ */
 
-// ✅ CREATE user if not exists
-export const createUserIfNotExists = async () => {
+const currentUid = () => auth.currentUser?.uid || null
+
+/**
+ * Ensure a user doc exists. Optionally merge extra fields.
+ */
+export const ensureUserDoc = async (uid, extra = {}) => {
+  const userId = uid || currentUid()
+  if (!userId) throw new Error('No user signed in')
+
   const user = auth.currentUser
-  if (!user) {
-    console.error("User not logged in.")
-    return
-  }
+  const ref = doc(db, 'users', userId)
+  const snap = await getDoc(ref)
 
-  const userRef = doc(db, "users", user.uid)
-  const userSnap = await getDoc(userRef)
-
-  if (!userSnap.exists()) {
-    await setDoc(userRef, {
-      user_id: user.uid,
-      name: user.displayName || "No Name",
-      email: user.email,
-      user_type: "",
+  if (!snap.exists()) {
+    await setDoc(ref, {
+      user_id: userId,
+      name: user?.displayName || 'No Name',
+      email: user?.email || '',
+      user_type: '',
       is_admin: false,
-      join_date: serverTimestamp()
+      notifications: false,       // default OFF
+      tokens: [],                 // where we store FCM tokens
+      join_date: serverTimestamp(),
+      ...extra,
     })
-    console.log("New user document created in Firestore.")
-  } else {
-    console.log("User already exists in Firestore.")
+  } else if (extra && Object.keys(extra).length) {
+    await setDoc(ref, extra, { merge: true })
   }
+  return ref
 }
+
+/* Backwards compat alias */
+export const createUserIfNotExists = ensureUserDoc
+
+/* ------------------------------------------------------------------ */
+/* Reads                                                               */
+/* ------------------------------------------------------------------ */
 
 export const getUserData = async (uid) => {
-  const user = auth.currentUser
-  if (!user) return null
-  
-  const userId = uid || user.uid  // Use provided uid or fallback to current user
-  const userRef = doc(db, "users", userId)
-  const userSnap = await getDoc(userRef)
-  return userSnap.exists() ? userSnap.data() : null
+  const userId = uid || currentUid()
+  if (!userId) return null
+
+  const ref = doc(db, 'users', userId)
+  const snap = await getDoc(ref)
+  return snap.exists() ? snap.data() : null
 }
 
-// ✅ UPDATE current user data
-export const updateUserData = async (uid, data) => {
-  const user = auth.currentUser
-  if (!user) return
-  
-  const userId = uid || user.uid  // Use provided uid or fallback to current user
-  const userRef = doc(db, "users", userId)
-  await updateDoc(userRef, data)
-  console.log("✅ User data updated.")
+/* ------------------------------------------------------------------ */
+/* Writes                                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Safe upsert. Uses merge so it works even if the doc isn't created yet.
+ */
+export const updateUserData = async (data, uid) => {
+  const userId = uid || currentUid()
+  if (!userId) throw new Error('No userId available for updateUserData')
+
+  await setDoc(doc(db, 'users', userId), data, { merge: true })
+  // console.log('✅ User data merged.')
 }
 
-// ✅ DELETE another user (ADMIN ONLY)
+/** Remove a field (your original helper) */
+export const removeOnboardedField = async (userId) => {
+  await updateDoc(doc(db, 'users', userId), { onboarded: deleteField() })
+}
+
+/* ------------------------------------------------------------------ */
+/* Notifications & FCM tokens                                          */
+/* ------------------------------------------------------------------ */
+
+/** Persist notifications preference (true/false) */
+export const setNotificationPreference = async (enabled, uid) => {
+  const userId = uid || currentUid()
+  if (!userId) throw new Error('No user')
+  await setDoc(
+    doc(db, 'users', userId),
+    { notifications: !!enabled },
+    { merge: true }
+  )
+}
+
+/** Add a device token to users/{uid}.tokens[] */
+export const addPushToken = async (token, uid) => {
+  const userId = uid || currentUid()
+  if (!userId || !token) return
+  await setDoc(
+    doc(db, 'users', userId),
+    { tokens: arrayUnion(token) },
+    { merge: true }
+  )
+}
+
+/** Remove a device token from users/{uid}.tokens[] */
+export const removePushToken = async (token, uid) => {
+  const userId = uid || currentUid()
+  if (!userId || !token) return
+  await setDoc(
+    doc(db, 'users', userId),
+    { tokens: arrayRemove(token) },
+    { merge: true }
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Admin                                                               */
+/* ------------------------------------------------------------------ */
+
 export const deleteUserIfAdmin = async (uidToDelete) => {
-  const currentUser = auth.currentUser
-  if (!currentUser) {
-    alert("Not logged in.")
+  const me = currentUid()
+  if (!me) {
+    alert('Not logged in.')
     return
   }
 
-  const currentUserRef = doc(db, "users", currentUser.uid)
-  const currentUserSnap = await getDoc(currentUserRef)
-
-  if (currentUserSnap.exists() && currentUserSnap.data().is_admin) {
-    const userRef = doc(db, "users", uidToDelete)
-    await deleteDoc(userRef)
-    alert("✅ User deleted successfully.")
+  const mySnap = await getDoc(doc(db, 'users', me))
+  if (mySnap.exists() && mySnap.data().is_admin) {
+    await deleteDoc(doc(db, 'users', uidToDelete))
+    alert('✅ User deleted successfully.')
   } else {
-    alert("❌ You are not authorized to delete users.")
+    alert('❌ You are not authorized to delete users.')
   }
 }

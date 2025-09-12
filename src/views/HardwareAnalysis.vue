@@ -28,7 +28,8 @@
           {{ isScanning ? 'Scanning...' : 'Scan' }}
         </button>
 
-        <img v-if="imageUrl" :src="imageUrl" alt="Latest scan" class="scan-preview" />
+        <!-- We no longer show the big image here -->
+        <!-- <img v-if="imageUrl" :src="imageUrl" alt="Latest scan" class="scan-preview" /> -->
 
         <button v-if="scanComplete" class="back-to-diary-button" @click="backToDiary">
           <i class="bi bi-arrow-left"></i>
@@ -43,7 +44,7 @@
 import "../styles/HardwareAnalysis.css"
 import {
   getFirestore, addDoc, doc, onSnapshot,
-  serverTimestamp, collection, updateDoc
+  serverTimestamp, collection, updateDoc, setDoc
 } from 'firebase/firestore'
 import { getAuth } from 'firebase/auth'
 
@@ -55,7 +56,6 @@ export default {
     return {
       isScanning: false,
       scanComplete: false,
-      imageUrl: null,
       jobId: null,
       plantId: q.plantId || p.plantId || null,
       plantName: q.plantName || 'Plant',
@@ -77,15 +77,19 @@ export default {
       if (this.isScanning || !this.plantId) return
       this.isScanning = true
       this.scanComplete = false
-      this.imageUrl = null
 
       const db = getFirestore()
       const auth = getAuth()
+      const uid = auth.currentUser?.uid
+      if (!uid) {
+        this.isScanning = false
+        return alert('Please sign in to scan.')
+      }
 
-      // Create a scan job the Pi will pick up
+      // Create a scan job for the Pi
       const jobRef = await addDoc(collection(db, 'scanJobs'), {
         plantId: String(this.plantId),
-        createdBy: auth.currentUser?.uid || 'anonymous',
+        createdBy: uid,
         createdAt: serverTimestamp(),
         status: 'queued',
         imageUrl: null,
@@ -101,24 +105,54 @@ export default {
         if (!job) return
 
         if (job.status === 'uploaded' && job.imageUrl) {
-          this.imageUrl = job.imageUrl
-          this.scanComplete = true
-          this.isScanning = false
-          // Mark job done (best effort)
-          updateDoc(this.jobDocRef, { status: 'done' }).catch(() => {})
+          try {
+            // ✅ Write into uploads subcollection so PhotoList.vue sees it
+            const uploadId = `${uid}_${Date.now()}`
+            const uploadRef = doc(db, 'plants', String(this.plantId), 'uploads', uploadId)
 
-          // ✅ Update the plant document so the card flips to "Scanned"
-          const plantRef = doc(db, 'plants', String(this.plantId))
-          await updateDoc(plantRef, {
-            last_scan_time: serverTimestamp(),
-            status: 'Scanned',
-            status_alert: 'Photo analyzed',
-            mode: 'hardware',
-            tracking_description: 'Tracking: Hardware Device - Real-time monitoring with specialized sensors',
-            tracking_icon: 'bi bi-cpu',
-            last_photo_at: serverTimestamp(),
-            photo_url: job.imageUrl
-          }).catch(console.error)
+            await setDoc(uploadRef, {
+              id: uploadId,
+              plantId: String(this.plantId),
+              user_id: uid,              // 🔑 matches your rules
+              image_url: job.imageUrl,   // 🔑 matches PhotoList.vue
+              storage_path: job.storagePath || null,
+              timestamp: serverTimestamp(), // 🔑 matches PhotoList.vue
+              source: 'hardware',
+              detected_count: 0          // can be updated later
+            })
+
+            // Update plant doc (for cards, status, etc.)
+            const plantRef = doc(db, 'plants', String(this.plantId))
+            await updateDoc(plantRef, {
+              last_scan_time: serverTimestamp(),
+              status: 'Scanned',
+              status_alert: 'Photo analyzed',
+              mode: 'hardware',
+              tracking_description: 'Tracking: Hardware Device - Real-time monitoring with specialized sensors',
+              tracking_icon: 'bi bi-cpu',
+              last_photo_at: serverTimestamp(),
+              photo_url: job.imageUrl
+            }).catch(() => {})
+
+            // Best-effort mark job done
+            updateDoc(this.jobDocRef, { status: 'done' }).catch(() => {})
+
+            this.scanComplete = true
+            this.isScanning = false
+
+            // ✅ Redirect to PhotoList page
+            this.$router.push({
+              path: '/photolist',
+              query: {
+                plantId: this.plantId,
+                plantName: this.plantName
+              }
+            })
+          } catch (err) {
+            console.error('Failed to save upload doc:', err)
+            alert('Saved image, but failed to add to gallery.')
+            this.isScanning = false
+          }
         }
 
         if (job.status === 'error') {
@@ -135,3 +169,4 @@ export default {
   }
 }
 </script>
+

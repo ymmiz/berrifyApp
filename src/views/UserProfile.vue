@@ -3,11 +3,28 @@
   <div class="profile-page">
     <!-- Top Section -->
     <div class="profile-header">
-      <img 
-        :src="user.photoURL || '/userImage.png'" 
-        class="profile-avatar" 
-        :alt="userProfile.name || 'User'"
-      />
+      <div class="profile-avatar-container">
+        <img 
+          :src="user.photoURL || '/userImage.png'" 
+          class="profile-avatar" 
+          :alt="userProfile.name || 'User'"
+        />
+        <!-- Add upload button overlay -->
+        <input
+          type="file"
+          ref="fileInput"
+          accept="image/*"
+          style="display: none"
+          @change="handleImageUpload"
+        />
+        <button 
+          class="upload-photo-btn"
+          @click="$refs.fileInput.click()"
+          :disabled="uploadingImage"
+        >
+          <i class="bi" :class="uploadingImage ? 'bi-hourglass-split' : 'bi-camera-fill'"></i>
+        </button>
+      </div>
       
       <!-- Editable Name Section -->
       <div v-if="editingName" class="name-edit-section">
@@ -141,9 +158,10 @@
 
 <script>
 import "../styles/Profile.css";
-import { getAuth, onAuthStateChanged } from 'firebase/auth'
+import { getAuth, onAuthStateChanged, updateProfile } from 'firebase/auth'
 import { getFirestore, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore'
 import { getUserData, createUserIfNotExists, updateUserData } from '../scripts/userService.js'
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'
 
 export default {
   name: "Profile",
@@ -167,7 +185,8 @@ export default {
       totalHarvests: 0,
       loading: true,
       editingName: false,
-      tempName: ''
+      tempName: '',
+      uploadingImage: false,
     };
   },
   computed: {
@@ -364,7 +383,100 @@ export default {
           plantName: plant.name
         }
       })
-    }
+    },
+
+    async handleImageUpload(event) {
+      const file = event.target.files?.[0]
+      if (!file) return
+
+      try {
+        this.uploadingImage = true
+        const storage = getStorage()
+        const auth = getAuth()
+        const currentUser = auth.currentUser
+        
+        if (!currentUser) {
+          throw new Error('No authenticated user')
+        }
+
+        // Create a storage reference
+        const timestamp = Date.now()
+        const filename = `${timestamp}_${file.name}`
+        const path = `users/${currentUser.uid}/profile/${filename}`
+        const fileRef = storageRef(storage, path)
+
+        // Upload file
+        await uploadBytes(fileRef, file)
+        const photoURL = await getDownloadURL(fileRef)
+
+        // Update auth profile using imported updateProfile
+        await updateProfile(currentUser, {
+          photoURL: photoURL
+        })
+
+        // Update local state
+        this.user.photoURL = photoURL
+        await updateProfile(currentUser, { photo_url: photoURL});
+
+        // Update user profile in Firestore
+        await updateUserData({ photo_url: photoURL })
+
+      } catch (error) {
+        console.error('Error uploading image:', error)
+        alert('Failed to upload image. Please try again.')
+      } finally {
+        this.uploadingImage = false
+        if (event.target) event.target.value = ''
+      }
+    },
   }
 };
 </script>
+
+<style scoped>
+.profile-avatar-container {
+  position: relative;
+  display: inline-block;
+}
+
+.profile-avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4px solid #fff;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.upload-photo-btn {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #2e7d32;
+  color: white;
+  border: 3px solid #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.upload-photo-btn:hover {
+  transform: scale(1.1);
+  background: #1b5e20;
+}
+
+.upload-photo-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+.upload-photo-btn {
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+</style>

@@ -21,7 +21,9 @@
               id="password"
               type="password"
               v-model="password"
+              autocomplete="current-password"
               placeholder="Enter your password"
+              @keyup.enter="signInWithEmail"
             />
           </div>
           <button class="btn-main" @click="signInWithEmail">Sign In</button>
@@ -55,18 +57,23 @@
 </template>
 
 <script>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useSignIn } from '../scripts/useSignIn.js'
 import '../styles/LoginPage.css'
 
 export default {
   setup() {
     const router = useRouter()
+    const route = useRoute()
     const email = ref('')
     const password = ref('')
     const { isLoading, signInWithEmail, signInWithGoogle } = useSignIn(email, password)
 
+    onMounted(() => {
+      if (route.query.email) email.value = String(route.query.email)
+    })
+  
     const goToSignup = () => {
       router.push('/')
     }

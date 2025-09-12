@@ -9,38 +9,36 @@
     </div>
 
     <div class="page-content">
+      <!-- Hidden file input for phone uploads -->
+      <input
+        ref="fileInput"
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style="display:none"
+        @change="handleFile"
+      />
+
       <!-- Add Photo Button -->
       <div class="add-photo-section">
-        <button class="add-photo-btn" @click="addMorePhotos">
+        <button class="add-photo-btn" @click="addMorePhotos" :disabled="loadingUpload">
           <i class="bi bi-camera-fill"></i>
-          Add More Photos
+          {{ loadingUpload ? 'Uploading…' : 'Add More Photos' }}
         </button>
       </div>
 
       <!-- Photos grouped by day -->
       <div v-if="photosByDay.length" class="photos-timeline">
-        <div 
-          v-for="dayGroup in photosByDay" 
-          :key="dayGroup.date" 
-          class="day-group"
-        >
+        <div v-for="dayGroup in photosByDay" :key="dayGroup.date" class="day-group">
           <div class="day-header">
             <div class="date-info">
               <h3>{{ formatDate(dayGroup.date) }}</h3>
               <span class="photo-count">{{ dayGroup.photos.length }} photo{{ dayGroup.photos.length > 1 ? 's' : '' }}</span>
             </div>
-            <!-- <div class="day-stats" v-if="dayGroup.totalStrawberries">
-              <i class="bi bi-basket-fill"></i>
-              {{ dayGroup.totalStrawberries }} strawberries
-            </div> -->
           </div>
 
           <div class="photos-grid">
-            <div 
-              v-for="photo in dayGroup.photos" 
-              :key="photo.id"
-              class="photo-item"
-            >
+            <div v-for="photo in dayGroup.photos" :key="photo.id" class="photo-item">
               <div class="photo-thumbnail" @click="viewPhoto(photo)">
                 <img :src="photo.url" :alt="photo.filename" />
                 <div class="photo-overlay">
@@ -50,12 +48,8 @@
               <div class="photo-info">
                 <span class="photo-time">{{ formatTime(photo.uploadDate) }}</span>
                 <span class="photo-name">{{ photo.filename }}</span>
-                <!-- Delete button -->
-                <button 
-                  class="delete-photo-btn" 
-                  @click.stop="deletePhoto(photo)"
-                  title="Delete photo"
-                >
+                <span class="photo-source">({{ photo.source }})</span>
+                <button class="delete-photo-btn" @click.stop="deletePhoto(photo)" title="Delete photo">
                   <i class="bi bi-trash-fill"></i>
                 </button>
               </div>
@@ -71,9 +65,9 @@
         </div>
         <h3>No photos yet</h3>
         <p>Start by taking some photos of your {{ plantName.toLowerCase() }}</p>
-        <button class="btn-primary" @click="addMorePhotos">
+        <button class="btn-primary" @click="addMorePhotos" :disabled="loadingUpload">
           <i class="bi bi-camera-fill"></i>
-          Take First Photo
+          {{ loadingUpload ? 'Uploading…' : 'Take First Photo' }}
         </button>
       </div>
     </div>
@@ -81,14 +75,8 @@
     <!-- Photo Viewer Modal -->
     <div v-if="selectedPhoto" class="photo-modal" @click="closePhotoViewer">
       <div class="modal-content" @click.stop>
-        <button class="close-btn" @click="closePhotoViewer">
-          <i class="bi bi-x-lg"></i>
-        </button>
-        <!-- Delete button in modal -->
-        <button class="modal-delete-btn" @click="deletePhoto(selectedPhoto)" title="Delete photo">
-          <i class="bi bi-trash-fill"></i>
-        </button>
-        
+        <button class="close-btn" @click="closePhotoViewer"><i class="bi bi-x-lg"></i></button>
+        <button class="modal-delete-btn" @click="deletePhoto(selectedPhoto)" title="Delete photo"><i class="bi bi-trash-fill"></i></button>
         <img :src="selectedPhoto.url" :alt="selectedPhoto.filename" />
         <div class="photo-details">
           <h4>{{ selectedPhoto.filename }}</h4>
@@ -104,8 +92,14 @@
 </template>
 
 <script>
-import { getFirestore, collection, query, orderBy, getDocs, doc, deleteDoc, setDoc, serverTimestamp } from 'firebase/firestore'
-import { getStorage, ref as storageRef, deleteObject } from 'firebase/storage'
+import {
+  getFirestore, collection, query, orderBy, getDocs,
+  doc, deleteDoc, setDoc, serverTimestamp
+} from 'firebase/firestore'
+import {
+  getStorage, ref as storageRef, deleteObject,
+  uploadBytes, getDownloadURL
+} from 'firebase/storage'
 import { getAuth } from 'firebase/auth'
 
 export default {
@@ -114,33 +108,23 @@ export default {
     return {
       plantName: 'Plant',
       plantId: null,
+      mode: 'phone',       // default (phone or hardware)
       photos: [],
       selectedPhoto: null,
-      loading: true
+      loading: true,
+      loadingUpload: false
     }
   },
   computed: {
     photosByDay() {
       if (!this.photos.length) return []
-      
-      // Group photos by date
       const groups = {}
       this.photos.forEach(photo => {
         const date = new Date(photo.uploadDate).toDateString()
-        if (!groups[date]) {
-          groups[date] = {
-            date: date,
-            photos: [],
-            totalStrawberries: 0
-          }
-        }
+        if (!groups[date]) groups[date] = { date, photos: [], totalStrawberries: 0 }
         groups[date].photos.push(photo)
-        if (photo.detected) {
-          groups[date].totalStrawberries += photo.detected
-        }
+        if (photo.detected) groups[date].totalStrawberries += photo.detected
       })
-
-      // Convert to array and sort by date (newest first)
       return Object.values(groups).sort((a, b) => new Date(b.date) - new Date(a.date))
     }
   },
@@ -152,202 +136,141 @@ export default {
     loadPlantDetails() {
       if (this.$route.query.plantName) this.plantName = this.$route.query.plantName
       if (this.$route.query.plantId) this.plantId = this.$route.query.plantId
-      
-      if (!this.plantId) {
-        this.$router.push('/mydiary')
-      }
+      if (this.$route.query.mode) this.mode = this.$route.query.mode
+      if (!this.plantId) this.$router.push('/mydiary')
     },
 
     async loadPhotos() {
       if (!this.plantId) return
-      
       try {
         const db = getFirestore()
-        
-        // Load from the subcollection 'uploads' under the specific plant document
         const photosQuery = query(
           collection(db, 'plants', this.plantId, 'uploads'),
           orderBy('timestamp', 'desc')
         )
-        
         const snapshot = await getDocs(photosQuery)
-        
-        this.photos = snapshot.docs.map(doc => {
-          const data = doc.data()
+        this.photos = snapshot.docs.map(docSnap => {
+          const data = docSnap.data()
           return {
-            id: doc.id,
+            id: docSnap.id,
             url: data.image_url,
-            filename: this.extractFilename(data.storage_path) || `photo_${doc.id}.jpg`,
+            filename: this.extractFilename(data.storage_path) || `photo_${docSnap.id}.jpg`,
             uploadDate: data.timestamp?.toDate() || new Date(),
             source: data.source || 'unknown',
             detected: data.detected_count || 0,
-            storage_path: data.storage_path // Important: include this for deletion
+            storage_path: data.storage_path
           }
         })
-        
-      } catch (error) {
-        console.error('Error loading photos:', error)
-        // Optionally show user-friendly error message
-        this.$emit('show-error', 'Failed to load photos')
+      } catch (err) {
+        console.error('Error loading photos:', err)
       } finally {
         this.loading = false
       }
     },
 
-    // Helper method to extract filename from storage path
-    extractFilename(storagePath) {
-      if (!storagePath) return null
-      const parts = storagePath.split('/')
-      const fullName = parts[parts.length - 1]
-      // Remove timestamp prefix if it exists (e.g., "1234567890_photo.jpg" -> "photo.jpg")
-      return fullName.replace(/^\d+_/, '')
+    extractFilename(path) {
+      if (!path) return null
+      const parts = path.split('/')
+      return parts[parts.length - 1].replace(/^\d+_/, '')
     },
 
-    // Delete photo from both Firestore and Storage
     async deletePhoto(photo) {
-      // Show confirmation dialog
-      if (!confirm(`Are you sure you want to delete "${photo.filename}"? This cannot be undone.`)) {
-        return
-      }
-
+      if (!confirm(`Are you sure you want to delete "${photo.filename}"?`)) return
       try {
         const db = getFirestore()
         const storage = getStorage()
-        const auth = getAuth()
-        
-        // Check if user is authenticated
-        if (!auth.currentUser) {
-          throw new Error('You must be logged in to delete photos')
-        }
-
-        // Delete from Firestore uploads subcollection
         await deleteDoc(doc(db, 'plants', this.plantId, 'uploads', photo.id))
-        
-        // Delete from Firebase Storage if storage_path exists
         if (photo.storage_path) {
-          const fileRef = storageRef(storage, photo.storage_path)
-          await deleteObject(fileRef)
+          await deleteObject(storageRef(storage, photo.storage_path))
         }
-        
-        // Remove from local array to update UI immediately
         this.photos = this.photos.filter(p => p.id !== photo.id)
-        
-        // Update the main plant document
-        await this.updatePlantPhotoUrl(photo)
-        
-        // Close photo viewer if this photo was being viewed
-        if (this.selectedPhoto && this.selectedPhoto.id === photo.id) {
-          this.selectedPhoto = null
-        }
-        
-        console.log('Photo deleted successfully')
-        
-      } catch (error) {
-        console.error('Error deleting photo:', error)
-        alert('Failed to delete photo. Please try again.')
+        if (this.selectedPhoto?.id === photo.id) this.selectedPhoto = null
+      } catch (err) {
+        console.error('Error deleting photo:', err)
       }
     },
 
-    // Update the main plant document's photo_url after deletion
-    async updatePlantPhotoUrl(deletedPhoto) {
+    async handleFile(event) {
+      const file = event.target.files?.[0]
+      if (!file) return
       try {
+        this.loadingUpload = true
+        const storage = getStorage()
         const db = getFirestore()
-        const plantDocRef = doc(db, 'plants', this.plantId)
-        
-        // Check if the deleted photo was the current plant photo_url
-        const remainingPhotos = this.photos.filter(p => p.id !== deletedPhoto.id)
-        
-        if (remainingPhotos.length > 0) {
-          // Set to the most recent remaining photo
-          const mostRecent = remainingPhotos[0] // Already sorted by timestamp desc
-          await setDoc(plantDocRef, {
-            photo_url: mostRecent.url,
-            last_photo_at: mostRecent.uploadDate
-          }, { merge: true })
-        } else {
-          // No photos left, remove photo_url and last_photo_at
-          await setDoc(plantDocRef, {
-            photo_url: null,
-            last_photo_at: null
-          }, { merge: true })
-        }
-        
-      } catch (error) {
-        console.error('Error updating plant photo URL:', error)
-        // Don't throw error here as the main deletion was successful
+        const auth = getAuth()
+        const uid = auth.currentUser?.uid
+        if (!uid) return alert('Please log in first.')
+        const ts = Date.now()
+        const safeName = file.name?.replace(/[^\w.\-]/g, '_') || 'photo.jpg'
+        const path = `plants/${this.plantId}/${uid}/${ts}_${safeName}`
+        const fileRef = storageRef(storage, path)
+        await uploadBytes(fileRef, file)
+        const url = await getDownloadURL(fileRef)
+        const uploadId = `${uid}_${ts}`
+        await setDoc(doc(db, 'plants', this.plantId, 'uploads', uploadId), {
+          id: uploadId,
+          plantId: this.plantId,
+          user_id: uid,
+          image_url: url,
+          storage_path: path,
+          timestamp: serverTimestamp(),
+          source: 'phone',
+          detected_count: 0
+        })
+        await this.refreshPhotos()
+      } catch (err) {
+        console.error('Upload failed:', err)
+        alert('Failed to upload photo.')
+      } finally {
+        this.loadingUpload = false
+        if (event?.target) event.target.value = ''
       }
     },
 
-    // Method to refresh photos after new upload
     async refreshPhotos() {
       this.loading = true
       await this.loadPhotos()
     },
 
-    formatDate(dateString) {
-      const date = new Date(dateString)
-      const today = new Date()
-      const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000)
-      
-      if (date.toDateString() === today.toDateString()) {
-        return 'Today'
-      } else if (date.toDateString() === yesterday.toDateString()) {
-        return 'Yesterday'
-      } else {
-        return date.toLocaleDateString('en-GB', { 
-          weekday: 'long', 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric' 
+    addMorePhotos() {
+      if (this.mode === 'hardware') {
+        this.$router.push({
+          path: '/hardware',
+          query: { plantId: this.plantId, plantName: this.plantName }
         })
+      } else {
+        this.$refs.fileInput.click()
       }
     },
 
-    formatTime(dateString) {
-      return new Date(dateString).toLocaleTimeString('en-GB', {
-        hour: '2-digit',
-        minute: '2-digit'
-      })
+    formatDate(d) {
+      const date = new Date(d)
+      const today = new Date()
+      const yesterday = new Date(today.getTime() - 86400000)
+      if (date.toDateString() === today.toDateString()) return 'Today'
+      if (date.toDateString() === yesterday.toDateString()) return 'Yesterday'
+      return date.toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     },
 
-    formatDateTime(dateString) {
-      const date = new Date(dateString)
+    formatTime(d) {
+      return new Date(d).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    },
+
+    formatDateTime(d) {
+      const date = new Date(d)
       return date.toLocaleDateString('en-GB', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+        hour: '2-digit', minute: '2-digit'
       })
     },
 
-    viewPhoto(photo) {
-      this.selectedPhoto = photo
-    },
-
-    closePhotoViewer() {
-      this.selectedPhoto = null
-    },
-
-    addMorePhotos() {
-      this.$router.push({
-        path: '/phone',  // Changed from '/plant-scan' to '/scan'
-        query: {
-          mode: 'add',  // Add mode parameter
-          plantId: this.plantId,
-          plantName: this.plantName,
-          returnTo: '/photolist'  // Add return path
-        }
-      })
-    },
-
-    goBack() {
-      this.$router.push('/mydiary')
-    }
+    viewPhoto(photo) { this.selectedPhoto = photo },
+    closePhotoViewer() { this.selectedPhoto = null },
+    goBack() { this.$router.push('/mydiary') }
   }
 }
 </script>
+
 
 <style scoped>
 .page-container {

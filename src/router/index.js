@@ -11,6 +11,7 @@ import UserProfile from '@/views/UserProfile.vue'
 import ForgotPassword from '@/views/ForgotPassword.vue'
 import HardwareAnalysis from '@/views/HardwareAnalysis.vue'
 import PhotoList from '@/views/PhotoList.vue'
+import PhoneHarvest from '@/views/PhoneHarvest.vue'
 
 const routes = [
 
@@ -73,17 +74,18 @@ const routes = [
     path: '/profile',
     name: 'UserProfile',
     component: UserProfile
+  },
+  {
+    path: '/phoneharvest',
+    name: 'PhoneHarvest',
+    component: PhoneHarvest
   }
-  // {
-  //   path: '/profile',
-  //   name: 'profile',
-  //   component: profile
-  // }
-
 ]
 const router = createRouter({
   history: createWebHistory(),
-  routes
+  routes,
+  linkActiveClass: 'router-link-active',
+  linkExactActiveClass: 'router-link-exact-active'
 })
 
 export default router

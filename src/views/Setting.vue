@@ -48,8 +48,6 @@
             <span class="slider"></span>
           </label>
         </div>
-
-        <!-- (Theme removed per your last version; easy to re-enable later) -->
       </section>
 
       <!-- Danger Zone -->
@@ -83,7 +81,6 @@
       <div class="modal-content" @click.stop>
         <h3>Change Password</h3>
         <form @submit.prevent="changePassword">
-          <!-- Only show current password if account uses password provider -->
           <div class="form-group" v-if="hasPasswordProvider">
             <label>Current Password</label>
             <input type="password" v-model="passwordForm.current" placeholder="Enter current password" required />
@@ -104,7 +101,7 @@
       </div>
     </div>
 
-    <!-- Add Password Modal (for Google-only accounts) -->
+    <!-- Add Password Modal -->
     <div v-if="showAddPassword" class="modal-overlay" @click="showAddPassword = false">
       <div class="modal-content" @click.stop>
         <h3>Add Password</h3>
@@ -165,8 +162,22 @@ import {
   GoogleAuthProvider,
   deleteUser
 } from 'firebase/auth'
+
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  updateDoc,
+  arrayUnion,
+  arrayRemove,
+  deleteField
+} from 'firebase/firestore'
+
+import { getMessaging, getToken, deleteToken, isSupported } from 'firebase/messaging'
+import { app as firebaseApp } from '../firebase'
+
 import { getUserData, updateUserData } from '../scripts/userService.js'
-import { getFirestore, collection, query, where, getDocs, doc, deleteDoc } from 'firebase/firestore'
+import { getFirestore as gf, collection, query, where, getDocs, deleteDoc as delDoc } from 'firebase/firestore' // used by deleteUserData()
 
 export default {
   name: 'Settings',
@@ -183,7 +194,7 @@ export default {
       addPasswordForm: { newPassword: '' },
       deleteForm: { password: '', confirmText: '' },
 
-      notifications: true,
+      notifications: false,   // default OFF
       theme: 'light',
       loadingUser: true
     }
@@ -197,17 +208,18 @@ export default {
         !!this.passwordForm.new &&
         this.passwordForm.new.length >= 6 &&
         this.passwordForm.new === this.passwordForm.confirm &&
-        // if using password provider, current password must be provided
         (this.hasPasswordProvider ? !!this.passwordForm.current : true)
       )
     }
   },
   methods: {
+    // ========================= NAV =========================
     goBack() {
       if (window.history.length > 1) this.$router.go(-1)
       else this.$router.push('/home')
     },
 
+    // =================== PROVIDERS / PROFILE ===============
     async refreshProviders() {
       const auth = getAuth()
       const u = auth.currentUser
@@ -216,61 +228,130 @@ export default {
       this.providers = (u.providerData || []).map(p => p.providerId)
     },
 
-    async updateNotifications() {
+    // ====================== NOTIFICATIONS ==================
+    async updateNotifications () {
       try {
-        if (!this.user.uid) return
-        await updateUserData({ notifications: this.notifications })
+        if (this.notifications) {
+          await this.enablePush()
+        } else {
+          await this.disablePush()
+        }
       } catch (e) {
-        console.error(e)
-        alert('Failed to update notifications')
+        console.error('Notification toggle failed:', e)
+        this.notifications = !this.notifications // revert
+        alert(e?.message || 'Failed to update notifications')
       }
     },
 
-    // Provider-aware reauth:
+    async enablePush () {
+      if (!this.user?.uid) throw new Error('No user')
+
+      if (!(await isSupported())) throw new Error('Push is not supported in this browser')
+      if (Notification.permission === 'denied') throw new Error('Notifications are blocked in your browser settings')
+      if (Notification.permission !== 'granted') {
+        const perm = await Notification.requestPermission()
+        if (perm !== 'granted') throw new Error('Permission was not granted')
+      }
+
+      // Ensure SW
+      if ('serviceWorker' in navigator) {
+        const existing = await navigator.serviceWorker.getRegistration('/firebase-cloud-messaging-push-scope')
+        if (!existing) await navigator.serviceWorker.register('/firebase-messaging-sw.js')
+      }
+
+      // Get token
+      const messaging = getMessaging(firebaseApp)
+      const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY
+      const swReg = await navigator.serviceWorker.getRegistration()
+      const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: swReg })
+      if (!token) throw new Error('Failed to get FCM token')
+
+      // Save to Firestore
+      const db = getFirestore()
+      await setDoc(
+        doc(db, 'users', this.user.uid),
+        {
+          notifications: true,
+          tokens: arrayUnion(token),
+          fcmToken: token,             // keep legacy in sync (or remove fallback in CF)
+        },
+        { merge: true }
+      )
+      await updateUserData({ notifications: true })
+
+      localStorage.setItem('fcm_web_token', token)
+
+      // Immediate confirmation notification
+      await swReg?.showNotification('Notifications enabled 🌱', {
+        body: 'You’ll get watering reminders at 8:00 PM.',
+        data: { ts: Date.now() },
+      })
+    },
+
+    async disablePush () {
+      if (!this.user?.uid) return
+
+      const db = getFirestore()
+      const messaging = getMessaging(firebaseApp)
+      const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY
+
+      let tokenToRemove = localStorage.getItem('fcm_web_token') || null
+      if (!tokenToRemove) {
+        try {
+          const swReg = await navigator.serviceWorker.getRegistration()
+          tokenToRemove = await getToken(messaging, { vapidKey, serviceWorkerRegistration: swReg })
+        } catch {}
+      }
+
+      await setDoc(
+        doc(db, 'users', this.user.uid),
+        {
+          notifications: false,
+          ...(tokenToRemove ? { tokens: arrayRemove(tokenToRemove) } : {}),
+          fcmToken: deleteField(),     // clear legacy fallback
+        },
+        { merge: true }
+      )
+      await updateUserData({ notifications: false })
+
+      try { await deleteToken(messaging) } catch {}
+      localStorage.removeItem('fcm_web_token')
+    },
+
+    // =================== PASSWORD / AUTH ===================
     async reauthSmart(passwordFromForm = '') {
       const auth = getAuth()
       const u = auth.currentUser
-      
       if (!u) throw new Error('No authenticated user')
-      
-      try {
-        await u.reload()
-        const providers = (u.providerData || []).map(p => p.providerId)
 
-        if (providers.includes('password')) {
-          if (!passwordFromForm) {
-            const err = new Error('Password required')
-            err.code = 'app/password-required'
-            throw err
-          }
-          const cred = EmailAuthProvider.credential(u.email, passwordFromForm)
-          return await reauthenticateWithCredential(u, cred)
-        }
+      await u.reload()
+      const providers = (u.providerData || []).map(p => p.providerId)
 
-        if (providers.includes('google.com')) {
-          const google = new GoogleAuthProvider()
-          try {
-            return await reauthenticateWithPopup(u, google)
-          } catch (error) {
-            if (error.code === 'auth/user-token-expired') {
-              // Force sign out and redirect to signin
-              await auth.signOut()
-              this.$router.replace('/signin')
-              throw new Error('Session expired. Please sign in again.')
-            }
-            throw error
-          }
+      if (providers.includes('password')) {
+        if (!passwordFromForm) {
+          const err = new Error('Password required')
+          err.code = 'app/password-required'
+          throw err
         }
-
-        throw new Error(`Unsupported providers: ${providers.join(', ') || 'none'}`)
-      } catch (error) {
-        if (error.code === 'auth/requires-recent-login') {
-          await auth.signOut()
-          this.$router.replace('/signin')
-          throw new Error('Please sign in again to continue')
-        }
-        throw error
+        const cred = EmailAuthProvider.credential(u.email, passwordFromForm)
+        return await reauthenticateWithCredential(u, cred)
       }
+
+      if (providers.includes('google.com')) {
+        const google = new GoogleAuthProvider()
+        try {
+          return await reauthenticateWithPopup(u, google)
+        } catch (error) {
+          if (error.code === 'auth/user-token-expired') {
+            await auth.signOut()
+            this.$router.replace('/signin')
+            throw new Error('Session expired. Please sign in again.')
+          }
+          throw error
+        }
+      }
+
+      throw new Error(`Unsupported providers: ${providers.join(', ') || 'none'}`)
     },
 
     async linkPasswordToAccount(newPassword) {
@@ -278,13 +359,9 @@ export default {
         const auth = getAuth()
         const u = auth.currentUser
         if (!u?.email) return alert('Not signed in')
-
-        // Reauth with Google (or other provider) via popup
         await this.reauthSmart()
-
         const cred = EmailAuthProvider.credential(u.email, newPassword)
         await u.linkWithCredential(cred)
-
         this.showAddPassword = false
         this.addPasswordForm.newPassword = ''
         await this.refreshProviders()
@@ -298,19 +375,12 @@ export default {
     async changePassword() {
       const auth = getAuth()
       const u = auth.currentUser
-      if (!u?.email) {
-        alert('You must be signed in to change password.')
-        return
-      }
+      if (!u?.email) return alert('You must be signed in to change password.')
       if (!this.isPasswordFormValid) return
 
       try {
-        // Reauth with correct provider
         await this.reauthSmart(this.passwordForm.current)
-
-        // Now update password
         await updatePassword(u, this.passwordForm.new)
-
         alert('Password updated successfully.')
         this.passwordForm = { current: '', new: '', confirm: '' }
         this.showChangePassword = false
@@ -330,36 +400,25 @@ export default {
       }
     },
 
+    // ===================== DELETE ACCOUNT ==================
     async deleteUserData(uid) {
-      const db = getFirestore()
-      
+      const db = gf()
       try {
-        // Delete user profile
-        await deleteDoc(doc(db, 'users', uid))
-        
-        // Delete user's plants and their uploads
+        await delDoc(doc(db, 'users', uid))
         const plantsQuery = query(collection(db, 'plants'), where('user_id', '==', uid))
         const plantsSnapshot = await getDocs(plantsQuery)
-        
         for (const plantDoc of plantsSnapshot.docs) {
-          // Delete plant uploads
           const uploadsQuery = query(collection(db, 'plants', plantDoc.id, 'uploads'))
           const uploadsSnapshot = await getDocs(uploadsQuery)
-          
           for (const uploadDoc of uploadsSnapshot.docs) {
-            await deleteDoc(doc(db, 'plants', plantDoc.id, 'uploads', uploadDoc.id))
+            await delDoc(doc(db, 'plants', plantDoc.id, 'uploads', uploadDoc.id))
           }
-
-          // Delete diary entries for this plant
           const entriesQuery = query(collection(db, 'plants', plantDoc.id, 'diary_entries'))
           const entriesSnapshot = await getDocs(entriesQuery)
-          
           for (const entryDoc of entriesSnapshot.docs) {
-            await deleteDoc(doc(db, 'plants', plantDoc.id, 'diary_entries', entryDoc.id))
+            await delDoc(doc(db, 'plants', plantDoc.id, 'diary_entries', entryDoc.id))
           }
-          
-          // Delete the plant document itself
-          await deleteDoc(doc(db, 'plants', plantDoc.id))
+          await delDoc(doc(db, 'plants', plantDoc.id))
         }
       } catch (error) {
         console.error('Error deleting user data:', error)
@@ -370,21 +429,13 @@ export default {
     async confirmDeleteAccount() {
       const auth = getAuth()
       const u = auth.currentUser
-      if (!u?.email) {
-        alert('You must be signed in to delete your account.')
-        return
-      }
+      if (!u?.email) return alert('You must be signed in to delete your account.')
       if (this.deleteForm.confirmText !== 'DELETE') return
 
       try {
         await this.reauthSmart(this.deleteForm.password)
-        
-        // First delete all user data
         await this.deleteUserData(u.uid)
-        
-        // Then delete auth user
         await deleteUser(u)
-
         alert('Your account has been deleted.')
         this.showDeleteAccount = false
         this.$router.replace('/signin')
@@ -411,8 +462,8 @@ export default {
       }
     }
   },
+
   async mounted() {
-    // Optional theme boot (kept from your previous version if you re-enable theme later)
     const savedTheme = localStorage.getItem('theme')
     if (savedTheme) {
       this.theme = savedTheme
@@ -432,17 +483,21 @@ export default {
         uid: fbUser.uid
       }
 
-      // Provider list for UI logic
       await this.refreshProviders()
 
-      // Load profile prefs
       try {
         const profile = await getUserData()
         if (profile && typeof profile.notifications === 'boolean') {
           this.notifications = profile.notifications
+        } else {
+          const hasToken = !!localStorage.getItem('fcm_web_token')
+          const permOk = (typeof Notification !== 'undefined') && Notification.permission === 'granted'
+          this.notifications = permOk && hasToken
         }
+        if (Notification?.permission === 'denied') this.notifications = false
       } catch (e) {
         console.error('Failed to load user profile', e)
+        this.notifications = false
       }
     })
   }
@@ -450,99 +505,45 @@ export default {
 </script>
 
 <style scoped>
-.settings-page {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: linear-gradient(135deg, #8ab58a 0%, #a8d4a8 100%);
-  position: relative;
-}
-.settings-page::before {
-  content: '';
-  position: absolute; inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M54.627 0l.83.828-1.415 1.415L51.8 0h2.827zM5.373 0l-.83.828L5.96 2.243 8.2 0H5.374zM48.97 0l3.657 3.657-1.414 1.414L46.143 0h2.828zM11.03 0L7.372 3.657 8.787 5.07 13.857 0H11.03zm32.284 0L49.8 6.485 48.384 7.9l-7.9-7.9h2.83zM16.686 0L10.2 6.485 11.616 7.9l7.9-7.9h-2.83zM22.344 0L13.858 8.485 15.272 9.9l7.9-7.9h-.828zm5.656 0L19.515 8.485 17.343 10.657l7.9-7.9h2.757zm5.656 0l-9.9 9.9-2.172 2.172 7.9-7.9h4.172zm5.656 0L30.8 8.485 28.628 10.657l7.9-7.9h2.757zM32.372 0L26.8 5.657 24.628 7.828l7.9-7.9h-.156zm2.758 0L29.8 5.657 27.628 7.828l7.9-7.9h-.398zm2.758 0L33.8 5.657l-2.172 2.172 7.9-7.9h-2.398zm2.757 0L36.8 5.657l-2.172 2.172 7.9-7.9h-2.399zM17.515 0L9.03 8.485l1.414 1.414L18.93 1.414 17.515 0z' fill='%23ffffff' fill-opacity='0.03' fill-rule='evenodd'/%3E%3C/svg%3E");
-  opacity: 0.4; pointer-events: none;
-}
-
-.header {
-  display: flex; align-items: center; gap: 12px;
-  padding: 24px 24px 0 24px; background: transparent; border-bottom: none;
-}
-.header .back-button {
-  width: 40px; height: 40px; border-radius: 16px; display: grid; place-items: center;
-  background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.08); cursor: pointer;
-}
-.settings-title {
-  font-size: 28px; margin: 0; color: #222; font-weight: 700; letter-spacing: 0.02em;
-}
-
+/* (Same styles you already had) */
+.settings-page { min-height: 100vh; display: flex; flex-direction: column; background: linear-gradient(135deg, #8ab58a 0%, #a8d4a8 100%); position: relative; }
+.settings-page::before { content: ''; position: absolute; inset: 0; background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M54.627 0l.83.828-1.415 1.415L51.8 0h2.827zM5.373 0l-.83.828L5.96 2.243 8.2 0H5.374zM48.97 0l3.657 3.657-1.414 1.414L46.143 0h2.828zM11.03 0L7.372 3.657 8.787 5.07 13.857 0H11.03zm32.284 0L49.8 6.485 48.384 7.9l-7.9-7.9h2.83zM16.686 0L10.2 6.485 11.616 7.9l7.9-7.9h-2.83zM22.344 0L13.858 8.485 15.272 9.9l7.9-7.9h-.828zm5.656 0L19.515 8.485 17.343 10.657l7.9-7.9h2.757zm5.656 0l-9.9 9.9-2.172 2.172 7.9-7.9h4.172zm5.656 0L30.8 8.485 28.628 10.657l7.9-7.9h2.757zM32.372 0L26.8 5.657 24.628 7.828l7.9-7.9h-.156zm2.758 0L29.8 5.657 27.628 7.828l7.9-7.9h-.398zm2.758 0L33.8 5.657l-2.172 2.172 7.9-7.9h-2.398zm2.757 0L36.8 5.657l-2.172 2.172 7.9-7.9h-2.399zM17.515 0L9.03 8.485l1.414 1.414L18.93 1.414 17.515 0z' fill='%23ffffff' fill-opacity='0.03' fill-rule='evenodd'/%3E%3C/svg%3E"); opacity: 0.4; pointer-events: none; }
+.header { display: flex; align-items: center; gap: 12px; padding: 24px 24px 0 24px; background: transparent; border-bottom: none; }
+.header .back-button { width: 40px; height: 40px; border-radius: 16px; display: grid; place-items: center; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.08); cursor: pointer; }
+.settings-title { font-size: 28px; margin: 0; color: #222; font-weight: 700; letter-spacing: 0.02em; }
 .settings-content { padding: 24px; flex: 1; }
-.settings-section {
-  background: #fff; border-radius: 20px; padding: 18px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.10); margin-bottom: 24px;
-}
+.settings-section { background: #fff; border-radius: 20px; padding: 18px; box-shadow: 0 4px 16px rgba(0,0,0,0.10); margin-bottom: 24px; }
 .section-title { font-size: 20px; color: #222; font-weight: 700; margin: 0 0 18px 0; letter-spacing: 0.03em; }
 .danger-title { color: #b91c1c; font-weight: 800; }
-
-.setting-item {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 0; border-radius: 14px; transition: background .15s;
-}
+.setting-item { display: flex; align-items: center; justify-content: space-between; padding: 18px 0; border-radius: 14px; transition: background .15s; }
 .setting-item + .setting-item { border-top: 1px dashed #e5e7eb; }
 .setting-item:hover { background: #f7f7fb; }
-
 .setting-info h4 { font-size: 17px; margin: 0 0 4px; color: #222; font-weight: 600; }
 .setting-info p { margin: 0; color: #555; font-size: 14px; }
-
-.setting-action {
-  width: 40px; height: 40px; border-radius: 14px; background: #f0f2f5; border: none;
-  display: grid; place-items: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-
+.setting-action { width: 40px; height: 40px; border-radius: 14px; background: #f0f2f5; border: none; display: grid; place-items: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
 .danger-section { border: 1px solid #fee2e2; background: #fff7f7; }
 .danger-action { background: #fee2e2; color: #b91c1c; }
-
 .toggle-switch { position: relative; width: 48px; height: 26px; display: inline-block; }
 .toggle-switch input { display: none; }
 .slider { position: absolute; cursor: pointer; inset: 0; background: #cfd4dc; border-radius: 9999px; transition: .2s; }
 .slider:before { content: ""; position: absolute; height: 20px; width: 20px; left: 3px; top: 3px; border-radius: 50%; background: white; transition: .2s; }
 input:checked + .slider { background: #34c759; }
 input:checked + .slider:before { transform: translateX(22px); }
-
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: grid; place-items: center; z-index: 50; }
 .modal-content { width: min(480px, 92vw); background: #fff; border-radius: 20px; padding: 28px; box-shadow: 0 20px 60px rgba(0,0,0,0.18); }
-.modal-content h3 { margin: 0 0 16px; color: #222; font-weight: 700; font-size: 22px; }
-
 .form-group { display: grid; gap: 10px; margin: 16px 0; }
 .form-group label { font-size: 15px; color: #222; font-weight: 600; }
-.form-group input {
-  border: 1px solid #e5e7eb; border-radius: 14px; padding: 12px 14px;
-  font-size: 15px; outline: none; background: #f7f7fb;
-}
+.form-group input { border: 1px solid #e5e7eb; border-radius: 14px; padding: 12px 14px; font-size: 15px; outline: none; background: #f7f7fb; }
 .form-group input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.10); }
-
 .modal-actions { display: flex; justify-content: flex-end; gap: 14px; margin-top: 18px; }
-.btn-cancel, .btn-save, .btn-delete {
-  border: none; border-radius: 14px; padding: 12px 18px; cursor: pointer; font-weight: 600; font-size: 15px;
-}
+.btn-cancel, .btn-save, .btn-delete { border: none; border-radius: 14px; padding: 12px 18px; cursor: pointer; font-weight: 600; font-size: 15px; }
 .btn-cancel { background: #f3f4f6; color: #222; }
 .btn-save { background: #6366f1; color: white; }
 .btn-save:disabled { opacity: .6; cursor: not-allowed; }
 .btn-delete { background: #ef4444; color: white; }
-
 .danger-copy { color: #7f1d1d; background: #fee2e2; padding: 12px; border-radius: 14px; }
-
-/* Bottom nav */
-.icon-nav {
-  position: fixed; bottom: 0; left: 0; right: 0; height: 65px;
-  background: white; display: flex; justify-content: space-around; align-items: center;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1); z-index: 1000; border-radius: 20px 20px 0 0;
-}
-.nav-item {
-  display: flex; align-items: center; justify-content: center;
-  width: 40px; height: 40px; cursor: pointer; transition: all 0.2s ease;
-  border-radius: 12px; color: #94a3b8;
-}
+.icon-nav { position: fixed; bottom: 0; left: 0; right: 0; height: 65px; background: white; display: flex; justify-content: space-around; align-items: center; box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1); z-index: 1000; border-radius: 20px 20px 0 0; }
+.nav-item { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; cursor: pointer; transition: all 0.2s ease; border-radius: 12px; color: #94a3b8; }
 .nav-item.active { color: #6366f1; transform: translateY(-4px); }
 .nav-item i { font-size: 20px; transition: all 0.2s ease; }
 .emoji { font-size: 20px; }

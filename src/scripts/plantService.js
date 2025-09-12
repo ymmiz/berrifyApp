@@ -1,5 +1,3 @@
-// plantService.js
-
 import {
   collection,
   addDoc,
@@ -25,26 +23,26 @@ import { auth, db, storage } from '../firebase'
 
 /* ----------------------------- Utilities ------------------------------ */
 
-function makeNameKey(name = '') {
+function makeNameKey (name = '') {
   return name.trim().toLowerCase().replace(/\s+/g, ' ')
 }
 
-function inferIconFromMode(mode) {
+function inferIconFromMode (mode) {
   return mode === 'hardware' ? 'bi bi-cpu' : 'bi bi-camera'
 }
 
-function mapFAtoBI(icon, mode) {
+function mapFAtoBI (icon, mode) {
   if (!icon) return inferIconFromMode(mode)
   if (/(^|\s)fa[brsl]?\s/.test(icon)) {
     if (icon.includes('fa-microchip')) return 'bi bi-cpu'
-    if (icon.includes('fa-camera'))    return 'bi bi-camera'
-    if (icon.includes('fa-tint'))      return 'bi bi-droplet'
-    if (icon.includes('fa-qrcode'))    return 'bi bi-qr-code-scan'
-    if (icon.includes('fa-cut'))       return 'bi bi-scissors'
-    if (icon.includes('fa-times'))     return 'bi bi-x-lg'
-    if (icon.includes('fa-chevron-up'))   return 'bi bi-chevron-up'
+    if (icon.includes('fa-camera')) return 'bi bi-camera'
+    if (icon.includes('fa-tint')) return 'bi bi-droplet'
+    if (icon.includes('fa-qrcode')) return 'bi bi-qr-code-scan'
+    if (icon.includes('fa-cut')) return 'bi bi-scissors'
+    if (icon.includes('fa-times')) return 'bi bi-x-lg'
+    if (icon.includes('fa-chevron-up')) return 'bi bi-chevron-up'
     if (icon.includes('fa-chevron-down')) return 'bi bi-chevron-down'
-    if (icon.includes('fa-plus'))      return 'bi bi-plus-lg'
+    if (icon.includes('fa-plus')) return 'bi bi-plus-lg'
     return inferIconFromMode(mode)
   }
   return icon
@@ -52,7 +50,12 @@ function mapFAtoBI(icon, mode) {
 
 /* --------------------------- Create / Read ---------------------------- */
 
-export async function addPlant(plantData) {
+/**
+ * Create a plant document.
+ * Writes canonical ownerId (and legacy user_id for back-compat).
+ * Does NOT set lastWateredAt on create.
+ */
+export async function addPlant (plantData) {
   const user = auth.currentUser
   if (!user) throw new Error('User not logged in')
 
@@ -60,12 +63,20 @@ export async function addPlant(plantData) {
   if (!name) throw new Error('Plant name is required')
 
   const nameKey = makeNameKey(name)
-  const dupQ = query(
+
+  // Duplicate check: try ownerId first, then legacy user_id.
+  let dupSnap = await getDocs(query(
     collection(db, 'plants'),
-    where('user_id', '==', user.uid),
-    where('name_key', '==', nameKey)
-  )
-  const dupSnap = await getDocs(dupQ)
+    where('ownerId', '==', user.uid),
+    where('name_key', '==', nameKey),
+  ))
+  if (dupSnap.empty) {
+    dupSnap = await getDocs(query(
+      collection(db, 'plants'),
+      where('user_id', '==', user.uid),
+      where('name_key', '==', nameKey),
+    ))
+  }
   if (!dupSnap.empty) {
     throw new Error(`Plant name "${name}" already exists. Please choose another name.`)
   }
@@ -73,23 +84,35 @@ export async function addPlant(plantData) {
   const normalizedIcon = mapFAtoBI(plantData.trackingIcon, plantData.mode)
 
   const plantDoc = {
+    // Ownership
+    ownerId: user.uid,        // canonical (used by Cloud Function)
+    user_id: user.uid,        // legacy field (keep until migrated)
+
+    // Names
     plant_name: name,
     name_key: nameKey,
-    user_id: user.uid,
-    created_at: serverTimestamp(),
 
+    // Timestamps / state
+    created_at: serverTimestamp(),
+    last_scan_time: null,
+    last_photo_at: null,
+    active: true,
+    expanded: false,
+
+    // Tracking UI
     mode: plantData.mode,
     tracking_description: plantData.trackingDescription,
     tracking_icon: normalizedIcon,
 
+    // Status UI
     status: plantData.status || 'Not yet scanned',
     status_alert: plantData.statusAlert || 'Scan to check status',
     moisture: plantData.moisture ?? null,
 
-    expanded: false,
+    // Media
     photo_url: null,
-    last_scan_time: null,
-    active: true,
+
+    // NOTE: do NOT set lastWateredAt here
   }
 
   const ref = await addDoc(collection(db, 'plants'), plantDoc)
@@ -97,16 +120,31 @@ export async function addPlant(plantData) {
   return ref.id
 }
 
-export async function getPlants() {
+/**
+ * Fetch all plants for current user.
+ * Prefers ownerId, falls back to legacy user_id.
+ */
+// Replace your getPlants function in plantService.js with this:
+
+export async function getPlants () {
   const user = auth.currentUser
   if (!user) return []
 
-  const qy = query(collection(db, 'plants'), where('user_id', '==', user.uid))
-  const snapshot = await getDocs(qy)
+  // Canonical query
+  let qy = query(collection(db, 'plants'), where('ownerId', '==', user.uid))
+  let snapshot = await getDocs(qy)
+
+  // Legacy fallback
+  if (snapshot.empty) {
+    qy = query(collection(db, 'plants'), where('user_id', '==', user.uid))
+    snapshot = await getDocs(qy)
+  }
 
   return snapshot.docs.map(d => {
     const data = d.data()
     const safeIcon = mapFAtoBI(data.tracking_icon, data.mode)
+    
+    // CRITICAL FIX: Make sure we expose the watering timestamp fields
     return {
       id: d.id,
       name: data.plant_name,
@@ -118,17 +156,35 @@ export async function getPlants() {
       moisture: data.moisture,
       expanded: data.expanded || false,
 
-      plant_name: data.plant_name,
+      // Ownership fields
+      ownerId: data.ownerId,
       user_id: data.user_id,
+
+      // WATERING FIELDS - These were missing!
+      lastWateredAt: data.lastWateredAt,  // ✅ ADD THIS
+      last_watered: data.last_watered,    // ✅ ADD THIS
+      //last_watering_type: data.last_watering_type, // ✅ ADD THIS
+
+      // Legacy fields
+      plant_name: data.plant_name,
       created_at: data.created_at?.toDate?.(),
       photo_url: data.photo_url,
       last_scan_time: data.last_scan_time?.toDate?.(),
       active: data.active !== false,
+
+      // Photo counting
+      photo_count: data.photo_count || 0,
+      last_photo_url: data.last_photo_url,
+      latestPhotoPath: data.latestPhotoPath,
+      firstPhotoAt: data.firstPhotoAt
     }
   })
 }
 
-export async function getPlantById(plantId) {
+/**
+ * Get one plant by id (includes ownerId)
+ */
+export async function getPlantById (plantId) {
   const ref = doc(db, 'plants', plantId)
   const snapshot = await getDoc(ref)
   if (!snapshot.exists()) throw new Error('Plant not found')
@@ -147,8 +203,10 @@ export async function getPlantById(plantId) {
     moisture: data.moisture,
     expanded: data.expanded || false,
 
-    plant_name: data.plant_name,
+    ownerId: data.ownerId,
     user_id: data.user_id,
+
+    plant_name: data.plant_name,
     created_at: data.created_at?.toDate?.(),
     photo_url: data.photo_url,
     last_scan_time: data.last_scan_time?.toDate?.(),
@@ -158,7 +216,7 @@ export async function getPlantById(plantId) {
 
 /* ------------------------------ Update -------------------------------- */
 
-export async function updatePlant(plantId, updates) {
+export async function updatePlant (plantId, updates) {
   const ref = doc(db, 'plants', plantId)
 
   if (updates.name !== undefined) {
@@ -169,15 +227,25 @@ export async function updatePlant(plantId, updates) {
     if (!newName) throw new Error('Plant name is required')
 
     const nameKey = makeNameKey(newName)
-    const qy = query(
+
+    // Duplicate check: ownerId first, then user_id
+    let snap = await getDocs(query(
       collection(db, 'plants'),
-      where('user_id', '==', user.uid),
-      where('name_key', '==', nameKey)
-    )
-    const snap = await getDocs(qy)
+      where('ownerId', '==', user.uid),
+      where('name_key', '==', nameKey),
+    ))
+    if (snap.empty) {
+      snap = await getDocs(query(
+        collection(db, 'plants'),
+        where('user_id', '==', user.uid),
+        where('name_key', '==', nameKey),
+      ))
+    }
     if (!snap.empty) {
       const dup = snap.docs.find(d => d.id !== plantId)
-      if (dup) throw new Error(`Plant name "${newName}" already exists. Please choose another name.`)
+      if (dup) {
+        throw new Error(`Plant name "${newName}" already exists. Please choose another name.`)
+      }
     }
   }
 
@@ -186,10 +254,12 @@ export async function updatePlant(plantId, updates) {
     firebaseUpdates.plant_name = updates.name.trim()
     firebaseUpdates.name_key = makeNameKey(updates.name)
   }
-  if (updates.trackingDescription !== undefined)
+  if (updates.trackingDescription !== undefined) {
     firebaseUpdates.tracking_description = updates.trackingDescription
-  if (updates.trackingIcon !== undefined)
+  }
+  if (updates.trackingIcon !== undefined) {
     firebaseUpdates.tracking_icon = mapFAtoBI(updates.trackingIcon, updates.mode)
+  }
   if (updates.status !== undefined) firebaseUpdates.status = updates.status
   if (updates.statusAlert !== undefined) firebaseUpdates.status_alert = updates.statusAlert
   if (updates.moisture !== undefined) firebaseUpdates.moisture = updates.moisture
@@ -205,7 +275,7 @@ export async function updatePlant(plantId, updates) {
 /* ------------------------------ Delete -------------------------------- */
 
 /** Soft delete: mark inactive */
-export async function deletePlant(plantId) {
+export async function deletePlant (plantId) {
   await updateDoc(doc(db, 'plants', plantId), {
     active: false,
     deletedAt: serverTimestamp(),
@@ -214,17 +284,18 @@ export async function deletePlant(plantId) {
 }
 
 /** Hard delete of document only */
-export async function deletePlantDocOnly(plantId) {
+export async function deletePlantDocOnly (plantId) {
   await deleteDoc(doc(db, 'plants', plantId))
   console.log(`Plant ${plantId} document deleted`)
 }
 
 /** Batch delete helper for subcollections */
-async function deleteSubcollection(parentPath, subcollectionName, batchSize = 250) {
+async function deleteSubcollection (parentPath, subcollectionName, batchSize = 250) {
   const subRef = collection(db, `${parentPath}/${subcollectionName}`)
   let totalDeleted = 0
   let batchCount = 0
 
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     const snap = await getDocs(query(subRef, limit(batchSize)))
     if (snap.empty) break
@@ -246,7 +317,7 @@ async function deleteSubcollection(parentPath, subcollectionName, batchSize = 25
 /**
  * Recursively delete a folder using paginated list()
  */
-async function deleteStorageFolder(folderRef) {
+async function deleteStorageFolder (folderRef) {
   let pageToken = undefined
   do {
     const { items, prefixes, nextPageToken } = await list(folderRef, { pageToken })
@@ -265,19 +336,19 @@ async function deleteStorageFolder(folderRef) {
 /**
  * Delete everything under a storage prefix (improved error handling)
  */
-export async function nukeStoragePrefix(prefix) {
+export async function nukeStoragePrefix (prefix) {
   let base = String(prefix).replace(/^\/+/, '').replace(/\/+$/, '')
   if (!base) throw new Error('Empty prefix')
-  
+
   const rootRef = storageRef(storage, `${base}/`)
 
   // Deep delete with better error handling
-  await (async function deleteFolderRec(folderRef) {
+  await (async function deleteFolderRec (folderRef) {
     let pageToken = undefined
     do {
       try {
         const { items, prefixes, nextPageToken } = await list(folderRef, { pageToken })
-        
+
         if (items?.length) {
           await Promise.all(items.map(async (itemRef) => {
             try {
@@ -288,11 +359,11 @@ export async function nukeStoragePrefix(prefix) {
             }
           }))
         }
-        
+
         if (prefixes?.length) {
           await Promise.all(prefixes.map(sub => deleteFolderRec(sub)))
         }
-        
+
         pageToken = nextPageToken
       } catch (listError) {
         if (listError.code === 'storage/object-not-found') {
@@ -311,9 +382,9 @@ export async function nukeStoragePrefix(prefix) {
   // Try to remove folder markers
   const markerCandidates = [
     storageRef(storage, base),
-    storageRef(storage, `${base}/`)
+    storageRef(storage, `${base}/`),
   ]
-  
+
   for (const cand of markerCandidates) {
     try {
       await deleteObject(cand)
@@ -332,22 +403,19 @@ export async function nukeStoragePrefix(prefix) {
 /**
  * Delete storage files for a plant (only check existing paths)
  */
-async function deleteStorageFiles(plantId) {
-  // Based on your storage structure, only check the path that exists
+async function deleteStorageFiles (plantId) {
   const storagePaths = [
-    `plants/${plantId}`, // This is where your files are actually stored
+    `plants/${plantId}`,
   ]
-  
+
   for (const path of storagePaths) {
     try {
       await nukeStoragePrefix(path)
       console.log(`Cleaned storage path: ${path}`)
     } catch (e) {
-      // Only log unexpected errors
       if (e?.code && !['storage/object-not-found', 'storage/unauthorized'].includes(e.code)) {
         console.error(`Storage deletion error for ${path}:`, e.code || e.message)
       }
-      // Continue with other paths even if one fails
     }
   }
 }
@@ -357,7 +425,7 @@ async function deleteStorageFiles(plantId) {
 /**
  * Complete cascade delete: Storage + Firestore subcollections + document
  */
-export async function deletePlantCascade(plantId) {
+export async function deletePlantCascade (plantId) {
   const parentPath = `plants/${plantId}`
   console.log(`Starting cascade delete for plant: ${plantId}`)
 
@@ -384,13 +452,13 @@ export async function deletePlantCascade(plantId) {
 
 /* ------------------------ Single file operations ---------------------- */
 
-export async function deletePhotoByPath(path) {
+export async function deletePhotoByPath (path) {
   const fileRef = storageRef(storage, path)
   await deleteObject(fileRef)
   console.log(`Deleted: ${path}`)
 }
 
-export async function deletePhotoByUrl(url) {
+export async function deletePhotoByUrl (url) {
   const match = url.match(/\/o\/([^?]+)/)
   if (!match) throw new Error('Invalid Firebase Storage URL')
   const fullPath = decodeURIComponent(match[1])
@@ -401,7 +469,7 @@ export async function deletePhotoByUrl(url) {
 
 /* ----------------------------- Misc helpers --------------------------- */
 
-export async function getNextPlantNumber() {
+export async function getNextPlantNumber () {
   try {
     const plants = await getPlants()
     let maxNumber = 0
@@ -419,7 +487,10 @@ export async function getNextPlantNumber() {
   }
 }
 
-export function createPlantData(name, mode) {
+/**
+ * Build client-side plant payload for addPlant()
+ */
+export function createPlantData (name, mode) {
   let trackingDescription = ''
   let trackingIcon = ''
   if (mode === 'hardware') {
@@ -438,4 +509,25 @@ export function createPlantData(name, mode) {
     statusAlert: 'Scan to check status',
     moisture: null,
   }
+}
+
+/* ------------------------- One-time migration ------------------------- */
+
+/**
+ * Optional: copy legacy user_id → ownerId for existing docs.
+ * Run once from a trusted context (e.g., a temporary admin page).
+ */
+export async function backfillOwnerIdFromLegacy () {
+  const snap = await getDocs(collection(db, 'plants'))
+  let updated = 0
+  for (const d of snap.docs) {
+    const p = d.data() || {}
+    const owner = p.ownerId || p.user_id || p.userId || p.uid
+    if (owner && owner !== p.ownerId) {
+      await updateDoc(doc(db, 'plants', d.id), { ownerId: owner })
+      updated++
+    }
+  }
+  console.log(`backfillOwnerIdFromLegacy: updated ${updated} docs`)
+  return updated
 }

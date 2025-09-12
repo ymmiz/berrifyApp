@@ -22,16 +22,31 @@
         </div>
       </div>
 
-      <!-- My Strawberry -->
+      <!-- My Strawberry (dynamic) -->
       <h1>My Strawberry</h1>
-      <div class="strawberry-container">
+
+      <div v-if="plantsLoading" class="strawberry-container">
+        <p>Loading plants…</p>
+      </div>
+
+      <div v-else class="strawberry-container">
         <div
           class="strawberry-card"
-          v-for="item in strawberries"
-          :key="item.label"
+          v-for="card in strawberryCards"
+          :key="card.id"
+          @click="openPlantOnDiary(card)"
+          role="button"
+          style="cursor:pointer"
         >
-          <img :src="item.image" :alt="item.label" />
-          <p>{{ item.label }}</p>
+          <img :src="card.image" :alt="card.label" />
+          <p>{{ card.label }}</p>
+        </div>
+
+        <div v-if="strawberryCards.length === 0" class="empty-state">
+          <p>No plants yet.</p>
+          <button class="add-btn" @click="$router.push({ name: 'MyDiary' })">
+            Add your first plant
+          </button>
         </div>
       </div>
 
@@ -62,6 +77,10 @@ import { Carousel, Slide } from "vue3-carousel";
 import "vue3-carousel/dist/carousel.css";
 import "../styles/Home.css";
 
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../firebase";
+import { getPlants } from "../scripts/plantService.js";
+
 export default {
   name: "Home",
   components: { Carousel, Slide },
@@ -79,14 +98,51 @@ export default {
         { label: "Caring", image: "/strawberries.png" },
         { label: "Watering", image: "/strawberries.png" },
       ],
-      strawberries: [
-        { label: "Strawberry 1", image: "/strawberries.png" },
-        { label: "Strawberry 2", image: "/strawberries.png" },
-        { label: "Strawberry 3", image: "/strawberries.png" },
-        { label: "Strawberry 4", image: "/strawberries.png" },
-        { label: "Strawberry 5", image: "/strawberries.png" },
-      ],
+      plants: [],
+      plantsLoading: true,
     };
+  },
+  computed: {
+    // 1 → 2 → 3 by number in name
+    strawberryCards() {
+      const numFromName = (s = "") => {
+        const m = String(s).match(/\d+/);
+        return m ? parseInt(m[0], 10) : Number.MAX_SAFE_INTEGER;
+      };
+      return this.plants
+        .slice()
+        .sort((a, b) => numFromName(a.name) - numFromName(b.name))
+        .map((p) => ({
+          id: p.id,
+          label: p.name || "Strawberry",
+          image: p.last_photo_url || "/strawberries.png",
+        }));
+    },
+  },
+  mounted() {
+    onAuthStateChanged(auth, async (user) => {
+      if (user) await this.loadPlants();
+      else this.plantsLoading = false;
+    });
+  },
+  methods: {
+    async loadPlants() {
+      try {
+        this.plantsLoading = true;
+        this.plants = await getPlants();
+      } catch (e) {
+        console.error("Failed to load plants on Home:", e);
+      } finally {
+        this.plantsLoading = false;
+      }
+    },
+    // Go to MyDiary and auto-scroll to that plant card
+    openPlantOnDiary(card) {
+      this.$router.push({
+        name: "MyDiary",
+        query: { plantId: card.id, plantName: card.label },
+      });
+    },
   },
 };
 </script>
