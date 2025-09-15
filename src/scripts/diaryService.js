@@ -16,7 +16,6 @@ export async function addDiaryEntry(plantId, { title,  photoUrl, moisture ,times
   const ref = collection(db, 'plants', plantId, 'diary_entries')
   return addDoc(ref, {
     title,
-    photoUrl: photoUrl || null,
     moisture: moisture || null,
     timestamp: serverTimestamp()
   })

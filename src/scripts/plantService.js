@@ -21,7 +21,6 @@ import {
 
 import { auth, db, storage } from '../firebase'
 
-/* ----------------------------- Utilities ------------------------------ */
 
 function makeNameKey (name = '') {
   return name.trim().toLowerCase().replace(/\s+/g, ' ')
@@ -48,13 +47,6 @@ function mapFAtoBI (icon, mode) {
   return icon
 }
 
-/* --------------------------- Create / Read ---------------------------- */
-
-/**
- * Create a plant document.
- * Writes canonical ownerId (and legacy user_id for back-compat).
- * Does NOT set lastWateredAt on create.
- */
 export async function addPlant (plantData) {
   const user = auth.currentUser
   if (!user) throw new Error('User not logged in')
@@ -81,8 +73,6 @@ export async function addPlant (plantData) {
     throw new Error(`Plant name "${name}" already exists. Please choose another name.`)
   }
 
-  const normalizedIcon = mapFAtoBI(plantData.trackingIcon, plantData.mode)
-
   const plantDoc = {
     // Ownership
     ownerId: user.uid,        // canonical (used by Cloud Function)
@@ -90,19 +80,17 @@ export async function addPlant (plantData) {
 
     // Names
     plant_name: name,
-    name_key: nameKey,
+    //name_key: nameKey,
 
     // Timestamps / state
     created_at: serverTimestamp(),
     last_scan_time: null,
     last_photo_at: null,
-    active: true,
-    expanded: false,
+    //active: true,
+    //expanded: false,
 
-    // Tracking UI
+    // Tracking UI - only store mode, derive icon as needed
     mode: plantData.mode,
-    tracking_description: plantData.trackingDescription,
-    tracking_icon: normalizedIcon,
 
     // Status UI
     status: plantData.status || 'Not yet scanned',
@@ -120,11 +108,6 @@ export async function addPlant (plantData) {
   return ref.id
 }
 
-/**
- * Fetch all plants for current user.
- * Prefers ownerId, falls back to legacy user_id.
- */
-// Replace your getPlants function in plantService.js with this:
 
 export async function getPlants () {
   const user = auth.currentUser
@@ -142,41 +125,29 @@ export async function getPlants () {
 
   return snapshot.docs.map(d => {
     const data = d.data()
-    const safeIcon = mapFAtoBI(data.tracking_icon, data.mode)
     
-    // CRITICAL FIX: Make sure we expose the watering timestamp fields
+    // Return streamlined essential attributes only
     return {
+      // Core identifiers
       id: d.id,
+      ownerId: data.ownerId,
+      user_id: data.user_id, // Keep for token access
+      
+      // Essential plant information
       name: data.plant_name,
       mode: data.mode,
-      trackingDescription: data.tracking_description,
-      trackingIcon: safeIcon,
       status: data.status,
-      statusAlert: data.status_alert,
       moisture: data.moisture,
-      expanded: data.expanded || false,
-
-      // Ownership fields
-      ownerId: data.ownerId,
-      user_id: data.user_id,
-
-      // WATERING FIELDS - These were missing!
-      lastWateredAt: data.lastWateredAt,  // ✅ ADD THIS
-      last_watered: data.last_watered,    // ✅ ADD THIS
-      //last_watering_type: data.last_watering_type, // ✅ ADD THIS
-
-      // Legacy fields
-      plant_name: data.plant_name,
-      created_at: data.created_at?.toDate?.(),
-      photo_url: data.photo_url,
-      last_scan_time: data.last_scan_time?.toDate?.(),
-      active: data.active !== false,
-
-      // Photo counting
-      photo_count: data.photo_count || 0,
-      last_photo_url: data.last_photo_url,
-      latestPhotoPath: data.latestPhotoPath,
-      firstPhotoAt: data.firstPhotoAt
+      
+      // Simplified tracking mode (derives icon and description)
+      trackMode: data.mode, // Use mode as trackMode
+      
+      // Key timestamps
+      lastWateredAt: data.lastWateredAt,
+      lastScanTime: data.last_scan_time?.toDate?.(),
+      
+      // Media
+      photoUrl: data.photo_url
     }
   })
 }
@@ -190,27 +161,29 @@ export async function getPlantById (plantId) {
   if (!snapshot.exists()) throw new Error('Plant not found')
 
   const data = snapshot.data()
-  const safeIcon = mapFAtoBI(data.tracking_icon, data.mode)
 
+  // Return streamlined essential attributes only
   return {
+    // Core identifiers
     id: snapshot.id,
+    ownerId: data.ownerId,
+    user_id: data.user_id, // Keep for token access
+    
+    // Essential plant information
     name: data.plant_name,
     mode: data.mode,
-    trackingDescription: data.tracking_description,
-    trackingIcon: safeIcon,
     status: data.status,
-    statusAlert: data.status_alert,
     moisture: data.moisture,
-    expanded: data.expanded || false,
-
-    ownerId: data.ownerId,
-    user_id: data.user_id,
-
-    plant_name: data.plant_name,
-    created_at: data.created_at?.toDate?.(),
-    photo_url: data.photo_url,
-    last_scan_time: data.last_scan_time?.toDate?.(),
-    active: data.active !== false,
+    
+    // Simplified tracking mode (derives icon and description)
+    trackMode: data.mode, // Use mode as trackMode
+    
+    // Key timestamps
+    lastWateredAt: data.lastWateredAt,
+    lastScanTime: data.last_scan_time?.toDate?.(),
+    
+    // Media
+    photoUrl: data.photo_url
   }
 }
 
@@ -253,12 +226,6 @@ export async function updatePlant (plantId, updates) {
   if (updates.name !== undefined) {
     firebaseUpdates.plant_name = updates.name.trim()
     firebaseUpdates.name_key = makeNameKey(updates.name)
-  }
-  if (updates.trackingDescription !== undefined) {
-    firebaseUpdates.tracking_description = updates.trackingDescription
-  }
-  if (updates.trackingIcon !== undefined) {
-    firebaseUpdates.tracking_icon = mapFAtoBI(updates.trackingIcon, updates.mode)
   }
   if (updates.status !== undefined) firebaseUpdates.status = updates.status
   if (updates.statusAlert !== undefined) firebaseUpdates.status_alert = updates.statusAlert
@@ -491,25 +458,27 @@ export async function getNextPlantNumber () {
  * Build client-side plant payload for addPlant()
  */
 export function createPlantData (name, mode) {
-  let trackingDescription = ''
-  let trackingIcon = ''
-  if (mode === 'hardware') {
-    trackingDescription = 'Tracking: Hardware Device - Real-time monitoring with specialized sensors'
-    trackingIcon = 'bi bi-cpu'
-  } else {
-    trackingDescription = 'Tracking: Phone Camera - Manual photo scanning'
-    trackingIcon = 'bi bi-camera'
-  }
   return {
     name,
     mode,
-    trackingDescription,
-    trackingIcon,
     status: 'Not yet scanned',
     statusAlert: 'Scan to check status',
     moisture: null,
   }
 }
+
+/**
+ * Helper functions to derive display values from trackMode
+ */
+// export function getTrackingIcon(trackMode) {
+//   return inferIconFromMode(trackMode)
+// }
+
+// export function getTrackingDescription(trackMode) {
+//   return trackMode === 'hardware' 
+//     ? 'Tracking: Hardware Device - Real-time monitoring with specialized sensors'
+//     : 'Tracking: Phone Camera - Manual photo scanning'
+// }
 
 /* ------------------------- One-time migration ------------------------- */
 

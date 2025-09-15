@@ -66,7 +66,7 @@
               <div
                 v-if="plant.mode === 'hardware' && plant.moisture !== null && plant.moisture !== undefined"
                 class="moisture"
-              >
+              >. 
                 <i class="bi bi-droplet"></i>
                 <span class="moisture-value">{{ plant.moisture }}%</span>
                 <span class="moisture-label">Soil Moisture</span>

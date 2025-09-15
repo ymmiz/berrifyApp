@@ -35,8 +35,8 @@ export const ensureUserDoc = async (uid, extra = {}) => {
       name: user?.displayName || 'No Name',
       email: user?.email || '',
       user_type: '',
-      is_admin: false,
-      notifications: false,       // default OFF
+      //is_admin: false,
+      //notifications: false,       // default OFF
       tokens: [],                 // where we store FCM tokens
       join_date: serverTimestamp(),
       ...extra,

@@ -6,7 +6,7 @@ import { getStorage } from "firebase/storage";
 import { getMessaging, getToken, onMessage, isSupported } from "firebase/messaging";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCoQrwt1QCbpr4_foobbMrp3c0jLcc-HS8",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: "strawberry-plant-ac866.firebaseapp.com",
   projectId: "strawberry-plant-ac866",
   storageBucket: "strawberry-plant-ac866.firebasestorage.app",

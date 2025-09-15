@@ -43,10 +43,17 @@
         </div>
 
         <div v-if="strawberryCards.length === 0" class="empty-state">
-          <p>No plants yet.</p>
-          <button class="add-btn" @click="$router.push({ name: 'MyDiary' })">
-            Add your first plant
-          </button>
+          <div class="empty-content">
+            <div class="empty-icon">
+              <span class="emoji">🍓</span>
+            </div>
+            <h3>No Strawberry Plants Yet</h3>
+            <p class="empty-text">Start your strawberry garden journey!</p>
+            <button class="add-plant-btn" @click="$router.push({ name: 'MyDiary' })">
+              <span class="emoji">🌱</span>
+              Add Your First Plant
+            </button>
+          </div>
         </div>
       </div>
 
