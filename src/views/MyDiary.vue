@@ -127,13 +127,13 @@
                   <i class="bi bi-scissors"></i>
                   I want to harvest now
                 </router-link>
-                <router-link
+                <!-- <router-link
                 v-else
                 class="harvest-btn" 
                 :to="{ name:'StrawberryRanking', query:{ plantId: plant.id, plantName: plant.name } }">
                   <i class="bi bi-scissors"></i>
                   I want to harvest now
-                </router-link>
+                </router-link> -->
               </div>
             </div>
 

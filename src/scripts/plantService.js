@@ -80,7 +80,7 @@ export async function addPlant (plantData) {
 
     // Names
     plant_name: name,
-    //name_key: nameKey,
+    name_key: nameKey,
 
     // Timestamps / state
     created_at: serverTimestamp(),

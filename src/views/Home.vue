@@ -38,7 +38,11 @@
           role="button"
           style="cursor:pointer"
         >
-          <img :src="card.image" :alt="card.label" />
+          <img 
+            :src="card.image" 
+            :alt="card.label"
+            @error="handleImageError"
+          />
           <p>{{ card.label }}</p>
         </div>
 
@@ -87,6 +91,7 @@ import "../styles/Home.css";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../firebase";
 import { getPlants } from "../scripts/plantService.js";
+import { getFirestore, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 
 export default {
   name: "Home",
@@ -122,7 +127,7 @@ export default {
         .map((p) => ({
           id: p.id,
           label: p.name || "Strawberry",
-          image: p.last_photo_url || "/strawberries.png",
+          image: p.latest_photo || "/strawberries.png",
         }));
     },
   },
@@ -136,13 +141,41 @@ export default {
     async loadPlants() {
       try {
         this.plantsLoading = true;
-        this.plants = await getPlants();
+        const plantsData = await getPlants();
+        
+        // Load latest photo for each plant from uploads subcollection
+        const db = getFirestore();
+        for (const plant of plantsData) {
+          try {
+            const uploadsRef = collection(db, 'plants', plant.id, 'uploads');
+            const latestPhotoQuery = query(
+              uploadsRef,
+              orderBy('timestamp', 'desc'),
+              limit(1)
+            );
+            
+            const photoSnapshot = await getDocs(latestPhotoQuery);
+            if (!photoSnapshot.empty) {
+              const latestPhoto = photoSnapshot.docs[0].data();
+              plant.latest_photo = latestPhoto.image_url || latestPhoto.photo_url;
+            }
+          } catch (photoError) {
+            console.log(`No photos found for plant ${plant.id}`);
+          }
+        }
+        
+        this.plants = plantsData;
       } catch (e) {
         console.error("Failed to load plants on Home:", e);
       } finally {
         this.plantsLoading = false;
       }
     },
+
+    handleImageError(event) {
+      event.target.src = "/strawberries.png";
+    },
+
     // Go to MyDiary and auto-scroll to that plant card
     openPlantOnDiary(card) {
       this.$router.push({

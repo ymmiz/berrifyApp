@@ -188,3 +188,79 @@ exports.sendWateringRemindersNow=onRequest(
       }
     },
 );
+
+const {onCall} = require("firebase-functions/v2/https");
+
+/**
+ * Helper: only allow callers who already have admin claim
+ * @param {object} request - The function request object
+ */
+function assertCallerIsAdminV2(request) {
+  const auth = request.auth;
+  if (!auth || !auth.token || auth.token.admin !== true) {
+    throw new Error("permission-denied: Admins only.");
+  }
+}
+
+/**
+ * Promote a user to admin by email, and record to /admins/{uid}.
+ * Callable from client: httpsCallable('addAdminByEmail', {email})
+ */
+exports.addAdminByEmail = onCall(async (request) => {
+  assertCallerIsAdminV2(request);
+
+  const email = String((request.data && request.data.email) || "")
+      .trim().toLowerCase();
+  if (!email) {
+    throw new Error("invalid-argument: 'email' is required");
+  }
+
+  // find user by email
+  let user;
+  try {
+    user = await admin.auth().getUserByEmail(email);
+  } catch (_) {
+    throw new Error(`not-found: No user with email ${email}`);
+  }
+
+  // set custom claim
+  await admin.auth().setCustomUserClaims(user.uid, {admin: true});
+
+  // mirror to /admins/{uid}
+  await db.collection("admins").doc(user.uid).set({
+    uid: user.uid,
+    email,
+    admin: true,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedBy: request.auth.token.email || request.auth.uid || "unknown",
+  }, {merge: true});
+
+  logger.info("Promoted to admin", {uid: user.uid, email});
+  return {ok: true, uid: user.uid};
+});
+
+/**
+ * Demote an admin by uid, and update /admins/{uid}.
+ * Callable from client: httpsCallable('removeAdminByUid', {uid})
+ */
+exports.removeAdminByUid = onCall(async (request) => {
+  assertCallerIsAdminV2(request);
+
+  const uid = String((request.data && request.data.uid) || "").trim();
+  if (!uid) {
+    throw new Error("invalid-argument: 'uid' is required");
+  }
+
+  // remove admin claim
+  await admin.auth().setCustomUserClaims(uid, {admin: false});
+
+  // update registry
+  await db.collection("admins").doc(uid).set({
+    admin: false,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedBy: request.auth.token.email || request.auth.uid || "unknown",
+  }, {merge: true});
+
+  logger.info("Demoted admin", {uid});
+  return {ok: true};
+});

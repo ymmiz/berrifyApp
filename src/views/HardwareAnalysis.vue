@@ -28,9 +28,6 @@
           {{ isScanning ? 'Scanning...' : 'Scan' }}
         </button>
 
-        <!-- We no longer show the big image here -->
-        <!-- <img v-if="imageUrl" :src="imageUrl" alt="Latest scan" class="scan-preview" /> -->
-
         <button v-if="scanComplete" class="back-to-diary-button" @click="backToDiary">
           <i class="bi bi-arrow-left"></i>
           Back to My Diary
@@ -86,87 +83,175 @@ export default {
         return alert('Please sign in to scan.')
       }
 
-      // Create a scan job for the Pi
-      const jobRef = await addDoc(collection(db, 'scanJobs'), {
-        plantId: String(this.plantId),
-        createdBy: uid,
-        createdAt: serverTimestamp(),
-        status: 'queued',
-        imageUrl: null,
-        storagePath: null,
-        error: null
-      })
-      this.jobId = jobRef.id
-      this.jobDocRef = jobRef
+      try {
+        // Create a scan job for the Pi
+        const jobRef = await addDoc(collection(db, 'scanJobs'), {
+          plantId: String(this.plantId),
+          createdBy: uid,
+          createdAt: serverTimestamp(),
+          status: 'queued',
+          imageUrl: null,
+          storagePath: null,
+          error: null
+        })
+        this.jobId = jobRef.id
+        this.jobDocRef = jobRef
 
-      // Watch job status
-      this.unsub = onSnapshot(doc(db, 'scanJobs', this.jobId), async (snap) => {
-        const job = snap.data()
-        if (!job) return
+        // Watch job status
+        this.unsub = onSnapshot(doc(db, 'scanJobs', this.jobId), async (snap) => {
+          const job = snap.data()
+          if (!job) return
 
-        if (job.status === 'uploaded' && job.imageUrl) {
-          try {
-            // ✅ Write into uploads subcollection so PhotoList.vue sees it
-            const uploadId = `${uid}_${Date.now()}`
-            const uploadRef = doc(db, 'plants', String(this.plantId), 'uploads', uploadId)
+          if (job.status === 'uploaded' && job.imageUrl) {
+            try {
+              const uploadId = `${uid}_${Date.now()}`
+              const uploadRef = doc(db, 'plants', String(this.plantId), 'uploads', uploadId)
 
-            await setDoc(uploadRef, {
-              id: uploadId,
-              plantId: String(this.plantId),
-              user_id: uid,              // 🔑 matches your rules
-              image_url: job.imageUrl,   // 🔑 matches PhotoList.vue
-              storage_path: job.storagePath || null,
-              timestamp: serverTimestamp(), // 🔑 matches PhotoList.vue
-              source: 'hardware',
-              detected_count: 0          // can be updated later
-            })
+              await setDoc(uploadRef, {
+                id: uploadId,
+                plantId: String(this.plantId),
+                user_id: uid,
+                image_url: job.imageUrl,
+                storage_path: job.storagePath || null,
+                timestamp: serverTimestamp(),
+                source: 'hardware',
+                detected_count: 0
+              })
 
-            // Update plant doc (for cards, status, etc.)
-            const plantRef = doc(db, 'plants', String(this.plantId))
-            await updateDoc(plantRef, {
-              last_scan_time: serverTimestamp(),
-              status: 'Scanned',
-              status_alert: 'Photo analyzed',
-              mode: 'hardware',
-              tracking_description: 'Tracking: Hardware Device - Real-time monitoring with specialized sensors',
-              tracking_icon: 'bi bi-cpu',
-              last_photo_at: serverTimestamp(),
-              photo_url: job.imageUrl
-            }).catch(() => {})
+              // 🔎 Call your ML API via proxy
+              let analysisResult = null
+              try {
+                  console.log("Current origin:", window.location.origin)
+                  console.log("Making request from:", window.location.hostname)
+                console.log(`Calling ML server : ${"http://0.0.0.0:8000"}/analyze_img`)
+                console.log("Image URL:", job.imageUrl)
 
-            // Best-effort mark job done
-            updateDoc(this.jobDocRef, { status: 'done' }).catch(() => {})
+                const res = await fetch(`${"http://0.0.0.0:8000"}/analyze_img`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    image_url: job.imageUrl,
+                    access_token: "123456"
+                  })
+                })
 
-            this.scanComplete = true
-            this.isScanning = false
+                console.log("ML Server Response Status:", res.status)
 
-            // ✅ Redirect to PhotoList page
-            this.$router.push({
-              path: '/photolist',
-              query: {
-                plantId: this.plantId,
-                plantName: this.plantName
+                if (!res.ok) {
+                  const errorText = await res.text()
+                  console.error('ML Server Error:', errorText)
+                  throw new Error(`ML Server Error ${res.status}: ${errorText}`)
+                }
+
+                // Handle response based on content type
+                const contentType = res.headers.get('content-type')
+                if (contentType && contentType.includes('application/json')) {
+                  // JSON response
+                  const jsonResult = await res.json()
+                  analysisResult = {
+                    ripeness: jsonResult.ripeness || "unknown",
+                    confidence: jsonResult.confidence || null,
+                    annotated_image: jsonResult.annotated_image || null
+                  }
+                } else {
+                  // Blob response (annotated image)
+                  const blob = await res.blob()
+                  const base64 = await this.blobToBase64(blob)
+                  analysisResult = {
+                    ripeness: "analyzed",
+                    confidence: null,
+                    annotated_image: base64
+                  }
+                }
+
+                console.log("Analysis result:", analysisResult)
+
+                // Update upload document with analysis results
+                await updateDoc(uploadRef, {
+                  status: "analyzed",
+                  annotated_image: analysisResult.annotated_image,
+                  ripeness: analysisResult.ripeness,
+                  confidence: analysisResult.confidence
+                })
+
+              } catch (err) {
+                console.error("Analysis failed:", err)
+                await updateDoc(uploadRef, {
+                  status: "error",
+                  error_message: err.message || "Unknown error"
+                })
               }
-            })
-          } catch (err) {
-            console.error('Failed to save upload doc:', err)
-            alert('Saved image, but failed to add to gallery.')
+
+              // Update plant document
+              const plantRef = doc(db, 'plants', String(this.plantId))
+              await updateDoc(plantRef, {
+                last_scan_time: serverTimestamp(),
+                status: 'Scanned',
+                status_alert: 'Photo analyzed',
+                mode: 'hardware',
+                tracking_description: 'Tracking: Hardware Device - Real-time monitoring with specialized sensors',
+                tracking_icon: 'bi bi-cpu',
+                last_photo_at: serverTimestamp(),
+                photo_url: job.imageUrl
+              }).catch(err => console.error('Failed to update plant:', err))
+
+              // Mark job as done
+              if (this.jobDocRef) {
+                updateDoc(this.jobDocRef, { status: 'done' }).catch(err => 
+                  console.error('Failed to mark job done:', err)
+                )
+              }
+
+              this.scanComplete = true
+              this.isScanning = false
+
+              // Navigate to PhotoList page
+              this.$nextTick(async () => {
+                try {
+                  await this.$router.push({
+                    name: 'PhotoList',
+                    query: { plantId: this.plantId, plantName: this.plantName }
+                  })
+                } catch (error) {
+                  console.error('Navigation error:', error)
+                  this.$router.push('/mydiary')
+                }
+              })
+              
+            } catch (err) {
+              console.error('Failed to save upload doc:', err)
+              alert('Saved image, but failed to add to gallery.')
+              this.isScanning = false
+            }
+          }
+
+          if (job.status === 'error') {
+            alert('Scan failed: ' + (job.error || 'unknown error'))
             this.isScanning = false
           }
-        }
-
-        if (job.status === 'error') {
-          alert('Scan failed: ' + (job.error || 'unknown error'))
-          this.isScanning = false
-        }
-      })
+        })
+        
+      } catch (error) {
+        console.error('Failed to start scan:', error)
+        alert('Failed to start scan: ' + error.message)
+        this.isScanning = false
+      }
     },
 
     backToDiary() {
       if (this.unsub) this.unsub()
       this.$router.push('/mydiary')
+    },
+
+    // ✅ FIXED: Move blobToBase64 function inside methods
+    blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onloadend = () => resolve(reader.result)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
     }
   }
 }
 </script>
-
