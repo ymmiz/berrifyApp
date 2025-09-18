@@ -123,10 +123,11 @@ export default {
               try {
                   console.log("Current origin:", window.location.origin)
                   console.log("Making request from:", window.location.hostname)
-                console.log(`Calling ML server : ${"http://0.0.0.0:8000"}/analyze_img`)
+                const mlBase = import.meta.env.VITE_FIREBASE_API_BASE
+                console.log(`Calling ML server : ${mlBase}/analyze_img`)
                 console.log("Image URL:", job.imageUrl)
 
-                const res = await fetch(`${"http://0.0.0.0:8000"}/analyze_img`, {
+                const res = await fetch(`${mlBase}/analyze_img`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({

@@ -27,19 +27,11 @@ export default defineConfig(({ mode }) => {
 
       // Optional: also keep a proxy so your browser never cross-origins in dev
       proxy: {
-        '/api': {
-          target: env.VITE_FIREBASE_API_BASE || 'http://localhost:5173',
+        '/ml': {
+          target: env.VITE_ML_API_BASE || 'http://localhost:8000',
           changeOrigin: true,
-          secure: true,
-          rewrite: (path) => path.replace(/^\/api/, ''),
-          // If you want to force CORS headers on proxied responses too:
-          configure: (proxy) => {
-            proxy.on('proxyRes', (proxyRes) => {
-              proxyRes.headers['access-control-allow-origin'] = '*'
-              proxyRes.headers['access-control-allow-methods'] = 'GET,POST,PUT,PATCH,DELETE,OPTIONS'
-              proxyRes.headers['access-control-allow-headers'] = '*'
-            })
-          },
+          secure: false,
+          // keep path as-is under /ml
         },
       },
     },
