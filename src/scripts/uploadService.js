@@ -29,7 +29,7 @@ export async function uploadPlantPhoto(plantId, file, source = 'phone') {
   const uploadDoc = await addDoc(collection(db, 'plants', plantId, 'uploads'), {
     image_url: url,
     storage_path: path,
-    source, // 'phone' here; Pi uses 'hardware'
+    source,
     user_id: user.uid,
     timestamp: serverTimestamp(),
     status: 'pending'
@@ -41,59 +41,89 @@ export async function uploadPlantPhoto(plantId, file, source = 'phone') {
     last_photo_at: serverTimestamp()
   }, { merge: true })
 
-  // 5. Call Firebase Function Proxy instead of Cloud Run
-let analysisResult = null
-try {
-  console.log("Calling ML server:", `${API_BASE}/analyze_img`)
-  const res = await fetch(`${API_BASE}/analyze_img`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      image_url: url,
-      access_token: "123456"
+  let analysisResult = null
+  let annotatedImage = null
+  let avgRedPercent = null
+  let ranking = null
+
+  try {
+    // 1️⃣ Get JSON analysis (ripe/unripe, scores, etc.)
+    const jsonRes = await fetch(`${API_BASE}/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        image_url: url,
+        access_token: "123456"
+      })
     })
-  })
 
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`)
+    if (!jsonRes.ok) throw new Error(`JSON API HTTP ${jsonRes.status}`)
+    analysisResult = await jsonRes.json()
+
+    // 2️⃣ Calculate avgRedPercent + ranking
+    if (analysisResult.ripeness_data) {
+      const strawberries = Object.values(analysisResult.ripeness_data)
+      const totalRed = strawberries.reduce((sum, s) => sum + (s.red_percent || 0), 0)
+      avgRedPercent = strawberries.length > 0 ? totalRed / strawberries.length : 0
+
+      if (avgRedPercent < 30) {
+        ranking = "🌱 Beginner Gardener"
+      } else if (avgRedPercent < 70) {
+        ranking = "🌿 Growing Expert"
+      } else {
+        ranking = "🍓 Master Harvester"
+      }
+    }
+
+    // 3️⃣ Get annotated image (binary)
+    const imgRes = await fetch(`${API_BASE}/analyze_img`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        image_url: url,
+        access_token: "123456"
+      })
+    })
+
+    if (!imgRes.ok) throw new Error(`Image API HTTP ${imgRes.status}`)
+    const blob = await imgRes.blob()
+    annotatedImage = await blobToBase64(blob)
+
+    // 4️⃣ Save both JSON + annotated image + ranking into Firestore
+    await updateDoc(doc(db, "plants", plantId, "uploads", uploadDoc.id), {
+      status: "analyzed",
+      analysis: analysisResult,     // JSON
+      annotated_image: annotatedImage, // base64
+      avgRedPercent,
+      ranking
+    })
+
+    // 5️⃣ Also update plant root doc with latest rank
+    await updateDoc(doc(db, "plants", plantId), {
+      latest_rank: ranking,
+      latest_avgRedPercent: avgRedPercent
+    })
+
+  } catch (err) {
+    console.error("Analysis failed:", err.message)
+    await updateDoc(doc(db, "plants", plantId, "uploads", uploadDoc.id), {
+      status: "error",
+      error_message: err.message || "Unknown error"
+    })
   }
-
-  // Read as blob (raw image)
-  const blob = await res.blob()
-  const imageUrl = URL.createObjectURL(blob) // frontend-only preview
-  const base64 = await blobToBase64(blob)    // convert for saving
-
-  analysisResult = {
-    ripeness: "unknown",    // placeholder until your ML server provides JSON
-    confidence: null,
-    annotated_image: base64
-  }
-
-  console.log("Wrapped analysis result:", analysisResult)
-
-  // Save to Firestore
-  await updateDoc(doc(db, "plants", plantId, "uploads", uploadDoc.id), {
-    status: "analyzed",
-    annotated_image: base64
-  })
-
-} catch (err) {
-  console.error("Analysis failed:", err.message)
-  await updateDoc(doc(db, "plants", plantId, "uploads", uploadDoc.id), {
-    status: "error",
-    error_message: err.message || "Unknown error"
-  })
-}
 
   return {
     id: uploadDoc.id,
     url,
     storage_path: path,
-    analysis: analysisResult
+    analysis: analysisResult,
+    annotated_image: annotatedImage,
+    avgRedPercent,
+    ranking
   }
 }
 
-// helper to convert Blob → base64
+// helper
 function blobToBase64(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -101,13 +131,4 @@ function blobToBase64(blob) {
     reader.onerror = reject
     reader.readAsDataURL(blob)
   })
-}
-
-export async function requestScan(plantId) {
-  const jobDoc = await addDoc(collection(db, "scanJobs"), {
-    plantId,
-    status: "queued",
-    created_at: serverTimestamp()
-  })
-  return jobDoc.id
 }

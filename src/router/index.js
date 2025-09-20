@@ -17,6 +17,7 @@ import AdminPage from '@/views/AdminPage.vue'
 
 import { auth } from '@/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
+import AnalysisView from '@/views/AnalysisView.vue'
 
 const routes = [
 
@@ -95,6 +96,11 @@ const routes = [
     path: '/adminpage',
     name: 'AdminPage',
     component: AdminPage
+  },
+  {
+    path: '/analysis',
+    name: 'AnalysisView',
+    component: AnalysisView,
   }
 ]
 const router = createRouter({

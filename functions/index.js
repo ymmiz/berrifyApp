@@ -1,8 +1,8 @@
-// functions/index.js
+/* eslint-disable max-len */
 const admin=require("firebase-admin");
 const {setGlobalOptions, logger}=require("firebase-functions/v2");
 const {onSchedule}=require("firebase-functions/v2/scheduler");
-const {onRequest}=require("firebase-functions/v2/https");
+const {onRequest, onCall}=require("firebase-functions/v2/https");
 
 admin.initializeApp();
 
@@ -38,7 +38,7 @@ const messaging=admin.messaging();
 async function sendGroupedRemindersCore() {
   const today=ymdInTZ(new Date(), "Asia/Bangkok");
 
-  // ownerId -> [{id,name}]
+  /** @type {Map<string,{id:string,name:string}[]>} */
   const byOwner=new Map();
   const plantsSnap=await db.collection("plants").get();
 
@@ -48,7 +48,7 @@ async function sendGroupedRemindersCore() {
       continue;
     }
 
-    // read lastWateredAt (Timestamp or string)
+    /** @type {Date|null} */
     let last=null;
     if (p.lastWateredAt) {
       if (typeof p.lastWateredAt.toDate==="function") {
@@ -71,7 +71,6 @@ async function sendGroupedRemindersCore() {
   let sent=0;
   const FieldValue=admin.firestore.FieldValue;
 
-  // one message per user to all their tokens
   for (const entry of byOwner.entries()) {
     const ownerId=entry[0];
     const plants=entry[1];
@@ -80,6 +79,7 @@ async function sendGroupedRemindersCore() {
     if (!userDoc.exists) {
       continue;
     }
+
     const u=userDoc.data()||{};
     const tokensArr=Array.isArray(u.tokens)?u.tokens:[];
     const targetTokens=tokensArr.length?tokensArr:(u.fcmToken?[u.fcmToken]:[]);
@@ -95,27 +95,15 @@ async function sendGroupedRemindersCore() {
     const title="Don’t forget to water 🌱";
     const body=first+extra+" haven’t been watered today";
 
-    const plantIds=plants.map((x) =>{
-      return x.id;
-    }).join(",");
+    const plantIds=plants.map((x)=>x.id).join(",");
 
     const base={
       notification: {title: title, body: body},
-      data: {
-        type: "watering_reminder",
-        plantIds: plantIds,
-        count: String(plants.length),
-      },
-      webpush: {
-        headers: {Urgency: "high"},
-        notification: {
-          tag: "watering_reminder_daily",
-          renotify: true,
-        },
-      },
+      data: {type: "watering_reminder", plantIds: plantIds, count: String(plants.length)},
+      webpush: {headers: {Urgency: "high"}, notification: {tag: "watering_reminder_daily", renotify: true}},
     };
 
-    const sendPromises=targetTokens.map((token) =>{
+    const sendPromises=targetTokens.map((token)=>{
       const msg=Object.assign({token: token}, base);
       return messaging.send(msg);
     });
@@ -138,12 +126,18 @@ async function sendGroupedRemindersCore() {
 
       logger.warn(
           "Send failed",
-          {ownerId: ownerId, code: code,
-            msg: err.message?err.message:String(err)},
+          {
+            ownerId: ownerId,
+            code: code,
+            msg: err.message?err.message:String(err),
+          },
       );
 
-      if (code==="messaging/invalid-registration-token"||
-         code==="messaging/registration-token-not-registered") {
+      const bad=[
+        "messaging/invalid-registration-token",
+        "messaging/registration-token-not-registered",
+      ];
+      if (bad.includes(code)) {
         const badToken=targetTokens[i];
         try {
           await db.collection("users").doc(ownerId).update({
@@ -152,7 +146,10 @@ async function sendGroupedRemindersCore() {
         } catch (e) {
           logger.warn(
               "Token cleanup failed",
-              {ownerId: ownerId, error: e&&e.message?e.message:String(e)},
+              {
+                ownerId: ownerId,
+                error: e&&e.message?e.message:String(e),
+              },
           );
         }
       }
@@ -168,7 +165,7 @@ async function sendGroupedRemindersCore() {
  */
 exports.dailyWateringReminder=onSchedule(
     {schedule: "0 20 * * *", timeZone: "Asia/Bangkok"},
-    async () =>{
+    async ()=>{
       return sendGroupedRemindersCore();
     },
 );
@@ -177,7 +174,7 @@ exports.dailyWateringReminder=onSchedule(
  * Manual trigger for testing: GET the function URL.
  */
 exports.sendWateringRemindersNow=onRequest(
-    async (req, res) =>{
+    async (req, res)=>{
       try {
         const result=await sendGroupedRemindersCore();
         res.status(200).json({ok: true, sent: result.sent});
@@ -189,78 +186,83 @@ exports.sendWateringRemindersNow=onRequest(
     },
 );
 
-const {onCall} = require("firebase-functions/v2/https");
-
 /**
- * Helper: only allow callers who already have admin claim
- * @param {object} request - The function request object
+ * Ensure caller has both admin and superadmin claims.
+ * Root-only operations.
+ * @param {object} request - The callable function request
  */
-function assertCallerIsAdminV2(request) {
-  const auth = request.auth;
-  if (!auth || !auth.token || auth.token.admin !== true) {
-    throw new Error("permission-denied: Admins only.");
+function assertCallerIsRoot(request) {
+  const t=(request.auth&&request.auth.token)||{};
+  if (t.admin!==true||t.superadmin!==true) {
+    throw new Error("permission-denied: Superadmins only.");
   }
 }
 
 /**
- * Promote a user to admin by email, and record to /admins/{uid}.
- * Callable from client: httpsCallable('addAdminByEmail', {email})
+ * Promote a user to admin by email and mirror to /admins/{uid}.
  */
-exports.addAdminByEmail = onCall(async (request) => {
-  assertCallerIsAdminV2(request);
+exports.addAdminByEmail=onCall(async (request)=>{
+  assertCallerIsRoot(request);
 
-  const email = String((request.data && request.data.email) || "")
-      .trim().toLowerCase();
+  const email=String((request.data&&request.data.email)||"")
+      .trim()
+      .toLowerCase();
   if (!email) {
     throw new Error("invalid-argument: 'email' is required");
   }
 
-  // find user by email
   let user;
   try {
-    user = await admin.auth().getUserByEmail(email);
+    user=await admin.auth().getUserByEmail(email);
   } catch (_) {
     throw new Error(`not-found: No user with email ${email}`);
   }
 
-  // set custom claim
   await admin.auth().setCustomUserClaims(user.uid, {admin: true});
 
-  // mirror to /admins/{uid}
-  await db.collection("admins").doc(user.uid).set({
-    uid: user.uid,
-    email,
-    admin: true,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedBy: request.auth.token.email || request.auth.uid || "unknown",
-  }, {merge: true});
+  await db.collection("admins").doc(user.uid).set(
+      {
+        uid: user.uid,
+        email: email,
+        admin: true,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedBy:
+        (request.auth&&request.auth.token&&request.auth.token.email)||
+        (request.auth&&request.auth.uid)||
+        "unknown",
+      },
+      {merge: true},
+  );
 
-  logger.info("Promoted to admin", {uid: user.uid, email});
+  logger.info("Promoted to admin", {uid: user.uid, email: email});
   return {ok: true, uid: user.uid};
 });
 
 /**
- * Demote an admin by uid, and update /admins/{uid}.
- * Callable from client: httpsCallable('removeAdminByUid', {uid})
+ * Demote an admin by uid and update /admins/{uid}.
  */
-exports.removeAdminByUid = onCall(async (request) => {
-  assertCallerIsAdminV2(request);
+exports.removeAdminByUid=onCall(async (request)=>{
+  assertCallerIsRoot(request);
 
-  const uid = String((request.data && request.data.uid) || "").trim();
+  const uid=String((request.data&&request.data.uid)||"").trim();
   if (!uid) {
     throw new Error("invalid-argument: 'uid' is required");
   }
 
-  // remove admin claim
   await admin.auth().setCustomUserClaims(uid, {admin: false});
 
-  // update registry
-  await db.collection("admins").doc(uid).set({
-    admin: false,
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedBy: request.auth.token.email || request.auth.uid || "unknown",
-  }, {merge: true});
+  await db.collection("admins").doc(uid).set(
+      {
+        admin: false,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedBy:
+        (request.auth&&request.auth.token&&request.auth.token.email)||
+        (request.auth&&request.auth.uid)||
+        "unknown",
+      },
+      {merge: true},
+  );
 
-  logger.info("Demoted admin", {uid});
+  logger.info("Demoted admin", {uid: uid});
   return {ok: true};
 });

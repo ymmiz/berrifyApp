@@ -3,63 +3,63 @@
   background: linear-gradient(135deg, #6b8e6b 0%, #8fbc8f 100%);
   padding: 20px;
   font-family: "Arial", sans-serif;
-  max-width: 1800px; /* wider for desktop */
-  margin: 0 auto; /* center horizontally */
+  max-width: 1200px; /* reduced from 1800px */
+  margin: 0 auto;
   box-sizing: border-box;
 }
 
 /* Desktop-specific optimizations */
 @media (min-width: 1024px) {
   .admin-dashboard {
-    padding: 40px 60px;
-    max-width: 2200px; /* much wider */
+    padding: 30px 40px; /* reduced padding */
+    max-width: 1400px; /* reduced from 2200px */
   }
 }
 
 @media (min-width: 1440px) {
   .admin-dashboard {
-    padding: 50px 80px;
-    max-width: 2400px; /* even wider for large screens */
+    padding: 40px 50px; /* reduced padding */
+    max-width: 1600px; /* reduced from 2400px */
   }
 
   .dashboard-header h1 {
-    font-size: 3.5rem;
+    font-size: 2.8rem; /* reduced from 3.5rem */
   }
 
   .dashboard-header p {
-    font-size: 1.6rem;
+    font-size: 1.3rem; /* reduced from 1.6rem */
   }
 }
 
 @media (min-width: 1920px) {
   .admin-dashboard {
-    padding: 60px 100px;
-    max-width: 2600px; /* maximum width for very large screens */
+    padding: 50px 60px; /* reduced padding */
+    max-width: 1800px; /* reduced from 2600px */
   }
 }
 
 /* Additional desktop optimizations */
 @media (min-width: 1024px) {
   .dashboard-header {
-    padding: 50px 40px;
+    padding: 40px 30px; /* reduced padding */
   }
 
   .tab-navigation {
-    padding: 16px;
-    margin-bottom: 30px;
+    padding: 12px; /* reduced padding */
+    margin-bottom: 25px;
   }
 
   .tab-btn {
-    padding: 20px 28px;
-    font-size: 1.1rem;
+    padding: 16px 20px; /* reduced padding */
+    font-size: 1rem;
   }
 
   .table-header {
-    padding: 30px;
+    padding: 20px; /* reduced padding */
   }
 
   .table-header h2 {
-    font-size: 2.2rem;
+    font-size: 1.8rem; /* reduced from 2.2rem */
   }
 }
 
@@ -67,21 +67,21 @@
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(10px);
   border-radius: 20px;
-  padding: 40px;
-  margin-bottom: 30px;
+  padding: 30px; /* reduced from 40px */
+  margin-bottom: 25px;
   text-align: center;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 }
 
 .dashboard-header h1 {
-  font-size: 3rem; /* larger on desktop */
-  color: #2c5530;
+  font-size: 2.5rem; /* reduced from 3rem */
+  color: #1a3d1a; /* darker green for better visibility */
   margin-bottom: 15px;
 }
 
 .dashboard-header p {
-  color: #5a6b5a;
-  font-size: 1.4rem;
+  color: #2d4a2d; /* darker green for better visibility */
+  font-size: 1.2rem; /* reduced from 1.4rem */
 }
 
 .tab-navigation {
@@ -120,7 +120,7 @@
   background: rgba(245, 245, 220, 0.95);
   backdrop-filter: blur(10px);
   border-radius: 20px;
-  padding: 40px;
+  padding: 30px; /* reduced from 40px */
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 }
 
@@ -132,8 +132,8 @@
 }
 
 .table-header h2 {
-  color: #2c5530;
-  font-size: 2rem;
+  color: #1a3d1a; /* darker green for better visibility */
+  font-size: 1.8rem; /* reduced from 2rem */
 }
 
 .header-actions {
@@ -196,14 +196,14 @@
 .data-table table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 1200px; /* Wider table for better desktop layout */
-  font-size: 1rem;
+  min-width: 900px; /* reduced from 1200px */
+  font-size: 0.95rem; /* reduced font size */
 }
 
 .data-table th {
-  background: #6b8e6b;
+  background: #4a6b4a; /* darker green for better contrast */
   color: white;
-  padding: 20px 18px;
+  padding: 16px 14px; /* reduced padding */
   text-align: left;
   font-weight: 600;
   position: sticky;
@@ -213,44 +213,45 @@
 }
 
 .data-table td {
-  padding: 20px 18px;
+  padding: 16px 14px;
   border-bottom: 1px solid #f0f0f0;
   vertical-align: middle;
   white-space: nowrap;
+  color: #333; /* ensure all table text is dark */
 }
 
 /* Desktop-specific table improvements */
 @media (min-width: 1024px) {
   .data-table table {
-    min-width: 1400px; /* Much wider for desktop */
-    font-size: 1.1rem;
+    min-width: 1100px; /* reduced from 1400px */
+    font-size: 1rem;
   }
 
   .data-table th,
   .data-table td {
-    padding: 24px 20px;
+    padding: 18px 16px; /* reduced padding */
   }
 }
 
 @media (min-width: 1440px) {
   .data-table table {
-    min-width: 1600px; /* Even wider for large screens */
+    min-width: 1200px; /* reduced from 1600px */
   }
 
   .data-table th,
   .data-table td {
-    padding: 28px 24px;
+    padding: 20px 18px; /* reduced padding */
   }
 }
 
 @media (min-width: 1920px) {
   .data-table table {
-    min-width: 1800px; /* Maximum width for very large screens */
+    min-width: 1300px; /* reduced from 1800px */
   }
 
   .data-table th,
   .data-table td {
-    padding: 32px 28px;
+    padding: 22px 20px; /* reduced padding */
   }
 }
 
@@ -259,18 +260,18 @@
 }
 
 .user-cell {
-  min-width: 220px;
+  min-width: 180px; /* reduced from 220px */
 }
 
 .user-info .user-name {
   font-weight: 600;
-  color: #2c5530;
+  color: #000; /* make user names black for maximum visibility */
   margin-bottom: 6px;
 }
 
 .user-info .user-email {
   font-size: 1rem;
-  color: #666;
+  color: #000; /* make emails black for maximum visibility */
 }
 
 .device-info {
@@ -281,10 +282,11 @@
 
 .device-icon {
   font-size: 1.3rem;
+  color: #333; /* add dark color for better visibility */
 }
 
 .plant-count {
-  background: #8fbc8f;
+  background: #4a6b4a; /* darker background */
   color: white;
   padding: 6px 12px;
   border-radius: 20px;
@@ -292,7 +294,7 @@
 }
 
 .harvest-total {
-  background: #6b8e6b;
+  background: #2d4a2d; /* darker background */
   color: white;
   padding: 6px 12px;
   border-radius: 20px;
@@ -320,17 +322,17 @@
 
 .status-badge.active,
 .quality-badge.excellent {
-  background: #28a745;
+  background: #1e7e34; /* darker green for better contrast */
   color: white;
 }
 
 .status-badge.inactive {
-  background: #6c757d;
+  background: #495057; /* darker gray */
   color: white;
 }
 
 .quality-badge.good {
-  background: #28a745;
+  background: #1e7e34; /* darker green for better contrast */
   color: white;
 }
 
@@ -340,17 +342,19 @@
 }
 
 .action-btn {
-  background: none;
-  border: none;
+  background: rgba(0, 0, 0, 0.05); /* light background for visibility */
+  border: 1px solid #ddd; /* add border for definition */
   font-size: 1.3rem;
   cursor: pointer;
   padding: 10px;
   border-radius: 8px;
-  transition: background-color 0.3s ease;
+  transition: all 0.3s ease;
+  color: #333; /* ensure dark text color */
 }
 
 .action-btn:hover {
-  background: #f0f0f0;
+  background: rgba(0, 0, 0, 0.1);
+  border-color: #bbb;
 }
 
 /* User Details Styles */
@@ -377,7 +381,7 @@
 }
 
 .user-details-header h2 {
-  color: #2c5530;
+  color: #1a3d1a; /* darker green for better visibility */
   margin: 0;
   font-size: 2rem;
 }
@@ -433,10 +437,10 @@
 .chat-modal {
   background: white;
   border-radius: 15px;
-  width: 90%;
-  max-width: 600px;
-  height: 70vh;
-  max-height: 600px;
+  width: 70%; /* reduced from 80% */
+  max-width: 600px; /* reduced from 700px */
+  height: 70vh; /* reduced from 75vh */
+  max-height: 600px; /* reduced from 700px */
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
@@ -455,7 +459,7 @@
 
 .chat-header h3 {
   margin: 0;
-  font-size: 1.3rem;
+  font-size: 1.3rem; /* reduced from 1.5rem */
 }
 
 .close-btn {
@@ -480,7 +484,7 @@
 
 .chat-messages {
   flex: 1;
-  padding: 20px;
+  padding: 20px; /* reduced from 25px */
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -565,7 +569,7 @@
   background: #6b8e6b;
   color: white;
   border: none;
-  padding: 12px 24px;
+  padding: 12px 20px; /* reduced padding */
   border-radius: 25px;
   cursor: pointer;
   font-weight: 600;
@@ -599,41 +603,41 @@
 /* Desktop-specific chat improvements */
 @media (min-width: 1024px) {
   .chat-modal {
-    width: 80%;
-    max-width: 700px;
-    height: 75vh;
-    max-height: 700px;
+    width: 85%; /* reduced from 90% */
+    max-width: 1000px; /* reduced from 1200px */
+    height: 75vh; /* reduced from 80vh */
+    max-height: 750px; /* reduced from 900px */
   }
 
   .chat-header {
-    padding: 25px;
+    padding: 20px; /* reduced from 25px */
   }
 
   .chat-header h3 {
-    font-size: 1.5rem;
+    font-size: 1.4rem; /* reduced from 1.6rem */
   }
 
   .chat-messages {
-    padding: 25px;
+    padding: 20px; /* reduced from 25px */
   }
 
   .message-content {
-    font-size: 1rem;
-    padding: 14px 18px;
+    font-size: 0.95rem; /* reduced from 1rem */
+    padding: 12px 16px; /* reduced padding */
   }
 
   .chat-input {
-    padding: 25px;
+    padding: 20px; /* reduced from 25px */
   }
 
   .message-input {
-    padding: 14px 18px;
-    font-size: 1.1rem;
+    padding: 12px 16px; /* reduced padding */
+    font-size: 1rem; /* reduced from 1.1rem */
   }
 
   .send-btn {
-    padding: 14px 28px;
-    font-size: 1.1rem;
+    padding: 12px 20px; /* reduced padding */
+    font-size: 1rem; /* reduced from 1.1rem */
   }
 }
 
@@ -641,10 +645,10 @@
 .graph-modal {
   background: white;
   border-radius: 15px;
-  width: 95%;
-  max-width: 1000px;
-  height: 85vh;
-  max-height: 800px;
+  width: 90%; /* reduced from 95% */
+  max-width: 800px; /* reduced from 1000px */
+  height: 80vh; /* reduced from 85vh */
+  max-height: 700px; /* reduced from 800px */
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
@@ -706,15 +710,15 @@
 
 .graph-container {
   flex: 1;
-  padding: 30px;
+  padding: 25px; /* reduced from 30px */
   overflow-y: auto;
   background: white;
 }
 
 .chart-section h4 {
-  color: #2c5530;
+  color: #1a3d1a; /* darker green for better visibility */
   margin: 0 0 20px 0;
-  font-size: 1.3rem;
+  font-size: 1.2rem; /* reduced from 1.3rem */
   text-align: center;
 }
 
@@ -722,8 +726,8 @@
   background: #f8f9fa;
   border: 2px dashed #dee2e6;
   border-radius: 10px;
-  padding: 30px;
-  min-height: 300px;
+  padding: 25px; /* reduced from 30px */
+  min-height: 250px; /* reduced from 300px */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -733,8 +737,8 @@
 .chart-bars {
   display: flex;
   align-items: end;
-  gap: 15px;
-  height: 250px;
+  gap: 12px; /* reduced from 15px */
+  height: 200px; /* reduced from 250px */
   width: 100%;
   justify-content: center;
 }
@@ -742,7 +746,7 @@
 .chart-bar {
   background: linear-gradient(to top, #6b8e6b, #8fbc8f);
   border-radius: 4px 4px 0 0;
-  min-width: 60px;
+  min-width: 50px; /* reduced from 60px */
   position: relative;
   display: flex;
   flex-direction: column;
@@ -760,7 +764,7 @@
   position: absolute;
   top: -25px;
   font-weight: 600;
-  color: #2c5530;
+  color: #1a3d1a; /* darker green for better visibility */
   font-size: 0.9rem;
 }
 
@@ -768,7 +772,7 @@
   position: absolute;
   bottom: -30px;
   font-size: 0.8rem;
-  color: #6c757d;
+  color: #444; /* darker gray for better visibility */
   text-align: center;
   white-space: nowrap;
 }
@@ -820,7 +824,7 @@
 .comparison-label {
   min-width: 150px;
   font-weight: 600;
-  color: #2c5530;
+  color: #1a3d1a; /* darker green for better visibility */
   font-size: 0.9rem;
 }
 
@@ -881,7 +885,7 @@
 
 .stat-card h5 {
   margin: 0 0 10px 0;
-  color: #6c757d;
+  color: #495057; /* darker gray for better visibility */
   font-size: 0.9rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -891,7 +895,7 @@
 .stat-number {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #2c5530;
+  color: #1a3d1a; /* darker green for better visibility */
 }
 
 /* Action Button for Graph */
@@ -914,92 +918,132 @@
   transform: translateY(-1px);
 }
 
+/* Fix any other potentially invisible text */
+.data-table td * {
+  color: #333 !important; /* force all table cell content to be dark */
+}
+
+.data-table .user-cell * {
+  color: #000 !important; /* force user cell content to be black */
+}
+
+/* Ensure device info text is visible */
+.device-info span,
+.device-info div {
+  color: #333 !important;
+}
+
+/* Make sure all text in table cells is visible */
+.data-table tbody tr td {
+  color: #333;
+}
+
+.data-table tbody tr td span,
+.data-table tbody tr td div,
+.data-table tbody tr td p {
+  color: #333 !important;
+}
+
+/* Specific fixes for any remaining invisible text */
+.user-name,
+.user-email,
+.device-name,
+.device-type {
+  color: #000 !important;
+  font-weight: 500;
+}
+
 /* Desktop-specific graph improvements */
 @media (min-width: 1024px) {
   .graph-modal {
-    width: 90%;
-    max-width: 1200px;
-    height: 80vh;
-    max-height: 900px;
+    width: 85%; /* reduced from 90% */
+    max-width: 1000px; /* reduced from 1200px */
+    height: 75vh; /* reduced from 80vh */
+    max-height: 750px; /* reduced from 900px */
   }
 
   .graph-header {
-    padding: 25px;
+    padding: 20px; /* reduced from 25px */
   }
 
   .graph-header h3 {
-    font-size: 1.6rem;
+    font-size: 1.4rem; /* reduced from 1.6rem */
   }
 
   .graph-tab {
-    padding: 18px 25px;
-    font-size: 1rem;
+    padding: 15px 20px; /* reduced padding */
+    font-size: 0.95rem; /* reduced from 1rem */
   }
 
   .graph-container {
-    padding: 40px;
+    padding: 30px; /* reduced from 40px */
   }
 
   .chart-section h4 {
-    font-size: 1.5rem;
+    font-size: 1.3rem; /* reduced from 1.5rem */
   }
 
   .chart-placeholder {
-    min-height: 350px;
-    padding: 40px;
+    min-height: 300px; /* reduced from 350px */
+    padding: 30px; /* reduced from 40px */
   }
 
   .chart-bars {
-    height: 300px;
-    gap: 20px;
+    height: 250px; /* reduced from 300px */
+    gap: 15px; /* reduced from 20px */
   }
 
   .chart-bar {
-    min-width: 80px;
+    min-width: 65px; /* reduced from 80px */
   }
 
   .bar-value {
-    font-size: 1rem;
+    font-size: 0.95rem;
+    color: #1a3d1a; /* ensure dark color on desktop too */
   }
 
   .bar-label {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
+    color: #444; /* ensure dark color on desktop too */
   }
 
   .pie-segment {
-    padding: 20px 25px;
-    font-size: 1rem;
-    min-width: 140px;
+    padding: 15px 20px; /* reduced padding */
+    font-size: 0.95rem; /* reduced from 1rem */
+    min-width: 120px; /* reduced from 140px */
   }
 
   .comparison-label {
-    min-width: 180px;
-    font-size: 1rem;
+    min-width: 150px;
+    font-size: 0.95rem;
+    color: #1a3d1a; /* ensure dark color on desktop too */
   }
 
   .comparison-bar-fill {
-    height: 35px;
+    height: 30px; /* reduced from 35px */
   }
 
   .comparison-value {
-    font-size: 1rem;
+    font-size: 0.95rem; /* reduced from 1rem */
   }
 
   .graph-stats {
     grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
-    padding: 30px;
+    gap: 15px; /* reduced from 20px */
+    padding: 20px; /* reduced from 30px */
   }
 
   .stat-card {
-    padding: 25px;
+    padding: 20px; /* reduced from 25px */
   }
 
   .stat-card h5 {
-    font-size: 1rem;
+    font-size: 0.9rem;
+    color: #495057; /* ensure dark color on desktop too */
   }
 
   .stat-number {
-    font-size: 1.8rem;
+    font-size: 1.5rem;
+    color: #1a3d1a; /* ensure dark color on desktop too */
   }
 }

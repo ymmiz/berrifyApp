@@ -1,32 +1,33 @@
 import admin from 'firebase-admin';
 import { readFileSync } from 'fs';
 
-// IMPORTANT: Replace with the path to your own service account key file
-const serviceAccount = JSON.parse(
-  readFileSync('/Users/zimmy/Documents/berrify-app/functions/serviceAccountKey.json', 'utf8')
-); 
+// Use your service account file path
+const sa = JSON.parse(readFileSync('/Users/zimmy/Documents/berrify-app/functions/serviceAccountKey.json','utf8'));
 
-// IMPORTANT: Replace with the UID of the user you just added
-const adminUid = 'GJm4Llr7zqNC2XijOLyDmVeIZsx1';
+// Put the UID of the account that should be ROOT
+const rootUid = 'GJm4Llr7zqNC2XijOLyDmVeIZsx1';
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+admin.initializeApp({ credential: admin.credential.cert(sa) });
 
-async function setAdminClaim() {
+(async () => {
   try {
-    // Look up the user by their UID
-    const user = await admin.auth().getUser(adminUid);
+    const u = await admin.auth().getUser(rootUid);
+    const claims = { ...(u.customClaims||{}), admin: true, superadmin: true };
+    await admin.auth().setCustomUserClaims(rootUid, claims);
 
-    // Set the custom claim
-    await admin.auth().setCustomUserClaims(user.uid, { admin: true });
+    // Optional: mirror for your UI badge
+    await admin.firestore().collection('admins').doc(rootUid).set({
+      uid: rootUid,
+      email: u.email || null,
+      admin: true,
+      role: 'superadmin',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
 
-    console.log(`Success! User ${user.email} (UID: ${user.uid}) is now an admin.`);
+    console.log(`✅ ${u.email} is now SUPERADMIN (admin + superadmin)`);
     process.exit(0);
-  } catch (error) {
-    console.error('Error setting custom claim:', error);
+  } catch (e) {
+    console.error('❌ Failed to set superadmin:', e);
     process.exit(1);
   }
-}
-
-setAdminClaim();
+})();

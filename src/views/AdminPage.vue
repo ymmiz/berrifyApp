@@ -1,6 +1,6 @@
 <template>
   <div class="admin-dashboard">
-    <!-- Authentication Guard -->
+    <!-- Auth guard -->
     <div v-if="!isAuthenticated" class="auth-guard">
       <div class="auth-message">
         <h2>🔐 Admin Authentication Required</h2>
@@ -11,7 +11,7 @@
       </div>
     </div>
 
-    <!-- Permission Guard -->
+    <!-- Permission guard -->
     <div v-else-if="!isAdmin" class="permission-guard">
       <div class="permission-message">
         <h2>⚠️ Access Denied</h2>
@@ -20,9 +20,8 @@
       </div>
     </div>
 
-    <!-- Main Dashboard -->
+    <!-- Main dashboard -->
     <div v-else>
-      <!-- Header -->
       <div class="dashboard-header">
         <div class="header-content">
           <div>
@@ -34,12 +33,9 @@
             <button @click="signOut" class="sign-out-btn">Sign Out</button>
           </div>
         </div>
-        
-        <!-- Connection Status -->
+
         <div class="connection-status">
-          <span :class="['status-indicator', connectionStatus]">
-            {{ connectionStatusText }}
-          </span>
+          <span :class="['status-indicator', connectionStatus]">{{ connectionStatusText }}</span>
           <div v-if="loading" class="loading-spinner">
             <div class="spinner"></div>
             <span>Loading data from Firebase...</span>
@@ -47,13 +43,11 @@
         </div>
       </div>
 
-      <!-- Error Display -->
       <div v-if="lastError" class="error-banner">
         <span>⚠️ {{ lastError }}</span>
         <button @click="lastError = null" class="close-error">×</button>
       </div>
 
-      <!-- Navigation Tabs -->
       <div class="tab-navigation">
         <button
           v-for="tab in tabs"
@@ -65,31 +59,25 @@
         </button>
       </div>
 
-      <!-- User Management Tab -->
+      <!-- Users tab -->
       <div v-if="activeTab === 'users'" class="tab-content">
-        <!-- User List -->
-        <div v-if="!selectedUser" class="user-list-view">
+        <div class="user-list-view">
           <div class="table-header">
             <h2>User Management</h2>
             <div class="header-actions">
-              <input
-                v-model="searchQuery"
-                placeholder="Search users..."
-                class="search-input"
-              />
+              <input v-model="searchQuery" placeholder="Search users..." class="search-input" />
               <select v-model="userSortBy" class="filter-select">
                 <option value="name">Sort by Name</option>
                 <option value="harvest">Sort by Strawberries Harvested</option>
                 <option value="joinDate">Sort by Join Date</option>
                 <option value="lastActive">Sort by Last Active</option>
               </select>
-              <button class="refresh-btn" @click="loadUsersFromFirebase" :disabled="loading">
+              <button class="refresh-btn" @click="loadUsersData" :disabled="loading">
                 🔄 {{ loading ? 'Loading...' : 'Refresh' }}
               </button>
             </div>
           </div>
 
-          <!-- Users Table -->
           <div class="data-table">
             <table>
               <thead>
@@ -109,27 +97,27 @@
                     {{ loading ? 'Loading users...' : 'No users found' }}
                   </td>
                 </tr>
+
                 <tr v-for="user in sortedUsers" :key="user.id">
                   <td class="user-cell">
                     <div class="user-info">
-                      <div class="user-name">{{ user.name || 'Unknown' }}</div>
+                      <div class="user-name">
+                        {{ user.name || 'Unknown' }}
+                        <span v-if="adminsMap.get(user.id) === true" class="badge-admin">ADMIN</span>
+                      </div>
                       <div class="user-email">{{ user.email || 'No email' }}</div>
                     </div>
                   </td>
                   <td>
                     <div class="device-info">
                       <span class="device-icon">
-                        {{ user.device === "Raspberry Pi" ? "🥧" : "📱" }}
+                        {{ user.device === "Raspberry Pi" ? "🥧" : (user.device === "Phone" ? "📱" : "🧩") }}
                       </span>
                       {{ user.device || 'Unknown' }}
                     </div>
                   </td>
-                  <td>
-                    <span class="plant-count">{{ user.plantCount || 0 }}</span>
-                  </td>
-                  <td>
-                    <span class="harvest-total">{{ user.totalHarvest || 0 }}</span>
-                  </td>
+                  <td><span class="plant-count">{{ user.plantCount || 0 }}</span></td>
+                  <td><span class="harvest-total">{{ user.totalHarvest || 0 }}</span></td>
                   <td>
                     <span :class="['status-badge', (user.status || 'unknown').toLowerCase()]">
                       {{ user.status || 'Unknown' }}
@@ -138,47 +126,94 @@
                   <td>{{ formatDate(user.joinDate) }}</td>
                   <td>
                     <div class="action-buttons">
-                      <button class="action-btn edit" @click="editUser(user)">
-                        ✏️
-                      </button>
-                      <button
-                        class="action-btn delete"
-                        @click="deleteUser(user.id)"
-                        :disabled="isUserAdmin(user.id)"
-                      >
-                        🗑️
-                      </button>
-                      <button
-                        class="action-btn view"
-                        @click="viewUserDetails(user)"
-                      >
-                        👁️ Details
-                      </button>
+                      <button class="action-btn view" @click="openUserDetails(user)">👁️ Details</button>
                     </div>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
-        </div>
 
-        <!-- User Details (keeping existing structure) -->
-        <div v-else class="user-details-view">
-          <!-- ... existing user details code ... -->
+          <!-- Details Modal -->
+          <div v-if="showDetails" class="modal-backdrop" @click.self="closeUserDetails">
+            <div class="modal-card" role="dialog" aria-modal="true">
+              <div class="modal-header">
+                <h3>User Details</h3>
+                <button class="modal-close" @click="closeUserDetails">×</button>
+              </div>
+
+              <div class="modal-body">
+                <div class="info-grid">
+                  <div><strong>Name:</strong> {{ detailUser?.name || 'Unknown' }}</div>
+                  <div><strong>Email:</strong> {{ detailUser?.email || 'No email' }}</div>
+                  <div><strong>Device:</strong> {{ detailUser?.device || 'Unknown' }}</div>
+                  <div><strong>Status:</strong> {{ detailUser?.status || 'Unknown' }}</div>
+                  <div><strong>Join Date:</strong> {{ formatDate(detailUser?.joinDate) }}</div>
+                  <div><strong>Last Active:</strong> {{ formatDate(detailUser?.lastActive) }}</div>
+                  <div><strong>Plant Count:</strong> {{ selectedUserPlants.length }}</div>
+                  <div><strong>Total Harvest Records:</strong> {{ selectedUserHarvests.length }}</div>
+                </div>
+
+                <hr />
+
+                <h4>Plants ({{ selectedUserPlants.length }})</h4>
+                <div v-if="selectedUserPlants.length === 0" class="muted">No plants found</div>
+                <div class="plants-grid" v-else>
+                  <div v-for="p in selectedUserPlants" :key="p.id" class="plant-card">
+                    <div class="plant-name">{{ p.name || 'Unnamed Plant' }}</div>
+                    <div class="plant-details">
+                      <div>Mode: {{ p.mode || 'phone' }}</div>
+                      <div>Status: {{ p.status || 'Unknown' }}</div>
+                      <div>Last Scan: {{ formatDate(p.last_scan_time || p.lastScanTime) }}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <h4 style="margin-top:16px;">Harvests ({{ selectedUserHarvests.length }})</h4>
+                <div v-if="selectedUserHarvests.length === 0" class="muted">No harvests found</div>
+                <div class="harvests-table" v-else>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Plant</th>
+                        <th>Yield</th>
+                        <th>Quality</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="h in selectedUserHarvests" :key="h.id">
+                        <td>{{ formatDate(h.date) }}</td>
+                        <td>{{ h.plantName || 'Unknown' }}</td>
+                        <td>{{ h.yield ?? 0 }}</td>
+                        <td>{{ h.quality || 'Unknown' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="modal-footer">
+                <button class="btn" @click="closeUserDetails">Close</button>
+              </div>
+            </div>
+          </div>
+          <!-- /Details Modal -->
         </div>
       </div>
 
-      <!-- Harvest Records Tab -->
+      <!-- Harvest tab -->
       <div v-if="activeTab === 'harvests'" class="tab-content">
         <div class="table-header">
           <h2>Harvest Records</h2>
           <div class="header-actions">
             <input type="date" v-model="harvestDateFilter" class="date-input" />
-            <button class="refresh-btn" @click="loadHarvestsFromFirebase" :disabled="loading">
+            <button class="refresh-btn" @click="loadHarvestsData" :disabled="loading">
               🔄 {{ loading ? 'Loading...' : 'Refresh' }}
             </button>
           </div>
         </div>
+
         <div class="data-table">
           <table>
             <thead>
@@ -202,9 +237,7 @@
                 <td>{{ formatDate(harvest.date) }}</td>
                 <td>{{ harvest.plantName || 'Unknown' }}</td>
                 <td>{{ harvest.owner || 'Unknown' }}</td>
-                <td>
-                  <strong>{{ harvest.yield || 0 }}</strong>
-                </td>
+                <td><strong>{{ harvest.yield || 0 }}</strong></td>
                 <td>
                   <span :class="['quality-badge', (harvest.quality || 'unknown').toLowerCase()]">
                     {{ harvest.quality || 'Unknown' }}
@@ -213,15 +246,8 @@
                 <td>{{ harvest.growthDuration || 0 }} days</td>
                 <td>
                   <div class="action-buttons">
-                    <button
-                      class="action-btn view"
-                      @click="viewHarvestDetails(harvest)"
-                    >
-                      👁️
-                    </button>
-                    <button class="action-btn edit" @click="editHarvest(harvest)">
-                      ✏️
-                    </button>
+                    <button class="action-btn view" @click="viewHarvestDetails(harvest)">👁️</button>
+                    <button class="action-btn edit" @click="editHarvest(harvest)">✏️</button>
                   </div>
                 </td>
               </tr>
@@ -229,44 +255,53 @@
           </table>
         </div>
       </div>
+      <!-- /Harvest tab -->
     </div>
   </div>
 </template>
 
 <script>
 import "../styles/AdminPage.css";
-import { db } from '../firebase';
 import {
-  collection,
-  getDocs,
-  doc,
-  updateDoc,
-  deleteDoc,
-  query,
-  orderBy,
-  where,
-  onSnapshot
-} from 'firebase/firestore';
-import { getAuth, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+  getAuth,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+} from "firebase/auth";
+import { ensureUserDoc } from "@/scripts/userService";
+import {
+  checkAdminStatus,
+  testFirebaseConnection,
+  getAllUsers,
+  getAllPlants,
+  getAllHarvests,
+  getAllAdmins,
+  setupUsersListener,
+  setupPlantsListener,
+  setupAdminsListener,
+  formatFirebaseError,
+  getUserPlants as getPlantsByUser,
+  getUserHarvests as getHarvestsByUser,
+  isUserAdmin,
+} from "@/scripts/adminService";
 
 export default {
   name: "AdminDashboard",
   data() {
     return {
-      // Authentication
+      // Auth
       isAuthenticated: false,
       currentUser: null,
       isAdmin: false,
       signingIn: false,
-      
+
       // Connection
-      connectionStatus: 'unknown', // 'connected', 'error', 'unknown'
+      connectionStatus: "unknown",
       lastError: null,
-      
-      // Existing data
+
+      // UI
       activeTab: "users",
-      selectedUser: null,
       searchQuery: "",
       userSortBy: "harvest",
       harvestDateFilter: "",
@@ -275,52 +310,55 @@ export default {
         { id: "users", label: "User Management" },
         { id: "harvests", label: "Harvest Records" },
       ],
+
+      // Data
       users: [],
       plants: [],
       harvests: [],
       adminsMap: new Map(),
-      busyRole: false,
+
+      // Unsubs
       unsubscribeUsers: null,
       unsubscribeHarvests: null,
       unsubscribePlants: null,
       unsubscribeAdmins: null,
+
+      // Details modal state
+      showDetails: false,
+      detailUser: null,
     };
   },
-  async mounted() {
-    console.log('AdminDashboard mounted - initializing authentication...');
-    this.setupAuthListener();
-  },
-  beforeUnmount() {
-    // Clean up listeners
-    if (this.unsubscribeUsers) this.unsubscribeUsers();
-    if (this.unsubscribeHarvests) this.unsubscribeHarvests();
-    if (this.unsubscribePlants) this.unsubscribePlants();
-    if (this.unsubscribeAdmins) this.unsubscribeAdmins();
-  },
+
   computed: {
     connectionStatusText() {
       switch (this.connectionStatus) {
-        case 'connected': return '🟢 Connected to Firebase';
-        case 'error': return '🔴 Connection Error';
-        default: return '🟡 Checking Connection...';
+        case "connected":
+          return "🟢 Connected to Firebase";
+        case "error":
+          return "🔴 Connection Error";
+        default:
+          return "🟡 Checking Connection...";
       }
     },
+
     filteredUsers() {
-      return this.users
-        .filter(u => !this.isUserAdmin(u.id))
-        .filter(
-          (user) =>
-            (user.name || '').toLowerCase().includes(this.searchQuery.toLowerCase()) ||
-            (user.email || '').toLowerCase().includes(this.searchQuery.toLowerCase())
-        );
+      const base = (this.users || []).filter((u) => !this.isUserAdminCheck(u.id));
+      const q = (this.searchQuery || "").toLowerCase();
+      if (!q) return base;
+      return base.filter(
+        (u) =>
+          (u.name || "").toLowerCase().includes(q) ||
+          (u.email || "").toLowerCase().includes(q)
+      );
     },
+
     sortedUsers() {
       const users = [...this.filteredUsers];
       switch (this.userSortBy) {
         case "harvest":
           return users.sort((a, b) => (b.totalHarvest || 0) - (a.totalHarvest || 0));
         case "name":
-          return users.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+          return users.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
         case "joinDate":
           return users.sort(
             (a, b) => new Date(a.joinDate || 0) - new Date(b.joinDate || 0)
@@ -333,29 +371,46 @@ export default {
           return users;
       }
     },
+
     filteredHarvests() {
       if (!this.harvestDateFilter) return this.harvests;
       return this.harvests.filter(
-        (harvest) => this.formatDateISO(harvest.date) === this.harvestDateFilter
+        (h) => this.formatDateISO(h.date) === this.harvestDateFilter
       );
     },
+
+    selectedUserPlants() {
+      if (!this.detailUser) return [];
+      return this.getUserPlants(this.detailUser);
+    },
+    selectedUserHarvests() {
+      if (!this.detailUser) return [];
+      return this.getUserHarvests(this.detailUser);
+    },
   },
+
+  async mounted() {
+    this.setupAuthListener();
+  },
+
+  beforeUnmount() {
+    this.cleanupListeners();
+  },
+
   methods: {
-    // ------ Authentication ------
+    /* Auth */
     setupAuthListener() {
       const auth = getAuth();
       onAuthStateChanged(auth, async (user) => {
         this.currentUser = user;
         this.isAuthenticated = !!user;
-        
+
         if (user) {
-          console.log('User authenticated:', user.email);
-          await this.checkAdminStatus(user.uid);
-          if (this.isAdmin) {
-            await this.initializeAdminDashboard();
-          }
+          await ensureUserDoc(user.uid);
+          // checkAdminStatus may return boolean; that's enough here
+          this.isAdmin = !!(await checkAdminStatus());
+          if (this.isAdmin) await this.initializeAdminDashboard();
         } else {
-          console.log('User signed out');
           this.isAdmin = false;
           this.cleanupListeners();
         }
@@ -366,11 +421,9 @@ export default {
       this.signingIn = true;
       try {
         const auth = getAuth();
-        const provider = new GoogleAuthProvider();
-        await signInWithPopup(auth, provider);
-      } catch (error) {
-        console.error('Sign in failed:', error);
-        this.showError('Sign in failed: ' + error.message);
+        await signInWithPopup(auth, new GoogleAuthProvider());
+      } catch (e) {
+        this.showError("Sign in failed: " + e.message);
       } finally {
         this.signingIn = false;
       }
@@ -380,543 +433,300 @@ export default {
       try {
         const auth = getAuth();
         await firebaseSignOut(auth);
-      } catch (error) {
-        console.error('Sign out failed:', error);
-        this.showError('Sign out failed: ' + error.message);
+      } catch (e) {
+        this.showError("Sign out failed: " + e.message);
       }
     },
 
-    async checkAdminStatus(uid) {
-      try {
-        // First check custom claims (primary method in your rules)
-        const auth = getAuth();
-        const user = auth.currentUser;
-        if (user) {
-          const tokenResult = await user.getIdTokenResult();
-          this.isAdmin = tokenResult.claims.admin === true;
-          console.log('Admin status from custom claims:', this.isAdmin);
-          
-          // If not admin via custom claims, check admins collection as fallback
-          if (!this.isAdmin) {
-            await this.loadAdminsFromFirebase();
-            this.isAdmin = this.adminsMap.get(uid) === true;
-            console.log('Admin status from admins collection:', this.isAdmin);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to check admin status:', error);
-        this.isAdmin = false;
-      }
-    },
-
-    // ------ Initialization ------
+    /* Init */
     async initializeAdminDashboard() {
-      console.log('Initializing admin dashboard...');
-      await this.testFirebaseConnection();
-      await this.loadDataFromFirebase();
+      const ok = await testFirebaseConnection();
+      this.connectionStatus = ok ? "connected" : "error";
+      if (!ok) return;
+
+      await this.loadAllData();
       this.setupRealtimeListeners();
     },
 
     cleanupListeners() {
       if (this.unsubscribeUsers) this.unsubscribeUsers();
-      if (this.unsubscribeHarvests) this.unsubscribeHarvests();
       if (this.unsubscribePlants) this.unsubscribePlants();
       if (this.unsubscribeAdmins) this.unsubscribeAdmins();
+      if (this.unsubscribeHarvests) this.unsubscribeHarvests();
+
       this.users = [];
       this.plants = [];
       this.harvests = [];
       this.adminsMap = new Map();
     },
 
-    // ------ Firebase Connection ------
-    async testFirebaseConnection() {
-      try {
-        console.log('Testing Firebase connection...');
-        // Test with a simple users collection query (admins have read access)
-        const usersCollection = collection(db, 'users');
-        const testQuery = query(usersCollection, orderBy('joinDate', 'desc'));
-        await getDocs(testQuery);
-        this.connectionStatus = 'connected';
-        this.lastError = null;
-        console.log('Firebase connection test passed!');
-        return true;
-      } catch (error) {
-        console.error('Firebase connection test failed:', error);
-        this.connectionStatus = 'error';
-        this.handleFirebaseError(error);
-        return false;
-      }
-    },
-
-    handleFirebaseError(error) {
-      let errorMessage = 'Firebase connection failed';
-      
-      if (error.code === 'permission-denied') {
-        errorMessage = 'Permission denied. Please check your admin privileges and Firestore security rules.';
-      } else if (error.code === 'unavailable') {
-        errorMessage = 'Firebase service unavailable. Please check your internet connection.';
-      } else if (error.message?.includes('API key')) {
-        errorMessage = 'Invalid API key. Please check your Firebase configuration.';
-      } else if (error.code === 'unauthenticated') {
-        errorMessage = 'Authentication required. Please sign in again.';
-      }
-      
-      this.lastError = errorMessage;
-      console.error('Firebase error:', error);
-    },
-
-    // ------ Data Loading ------
-    async loadDataFromFirebase() {
+    /* Loading */
+    async loadAllData() {
       this.loading = true;
       try {
-        console.log('Starting Firebase data load...');
-        await Promise.all([
-          this.loadUsersFromFirebase(),
-          this.loadPlantsFromFirebase(),
-          this.loadHarvestsFromFirebase(),
+        const [users, plants, harvests, admins] = await Promise.all([
+          getAllUsers(),
+          getAllPlants(),
+          getAllHarvests(),
+          getAllAdmins(),
         ]);
-        console.log('Firebase data load completed successfully!');
+        this.users = users;
+        this.plants = plants;
+        this.harvests = harvests;
+        this.adminsMap = admins;
+
+        this.recomputeUserAggregates();
         this.lastError = null;
-      } catch (error) {
-        console.error('Error loading data from Firebase:', error);
-        this.handleFirebaseError(error);
+      } catch (e) {
+        this.handleError(e);
       } finally {
         this.loading = false;
       }
     },
 
-    async loadUsersFromFirebase() {
+    async loadUsersData() {
+      this.loading = true;
       try {
-        console.log('Loading users from Firebase...');
-        // Use simple query first, add ordering if supported
-        let usersQuery;
-        try {
-          usersQuery = query(collection(db, 'users'), orderBy('joinDate', 'desc'));
-        } catch (e) {
-          // Fallback to simple query if orderBy fails due to missing index
-          console.log('OrderBy failed, using simple query:', e.message);
-          usersQuery = query(collection(db, 'users'));
-        }
-        
-        const querySnapshot = await getDocs(usersQuery);
-
-        this.users = querySnapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            name: data.name || data.displayName || 'Unknown User',
-            email: data.email || '',
-            device: data.device || 'Unknown',
-            plantCount: data.plantCount || 0,
-            totalHarvest: data.totalHarvest || 0,
-            status: data.status || 'Active',
-            joinDate: data.joinDate?.toDate?.() || data.joinDate || new Date(),
-            lastActive: data.lastActive?.toDate?.() || data.lastActive || new Date(),
-            user_id: data.user_id || doc.id, // Handle both id formats
-            ...data
-          };
-        });
-
-        console.log('Loaded users from Firebase:', this.users.length);
-      } catch (error) {
-        console.error('Error loading users:', error);
-        throw error;
-      }
-    },
-
-    async loadPlantsFromFirebase() {
-      try {
-        console.log('Loading plants from Firebase...');
-        const plantsQuery = query(collection(db, 'plants'));
-        const querySnapshot = await getDocs(plantsQuery);
-
-        this.plants = querySnapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            name: data.name || data.plant_name || 'Unnamed Plant',
-            owner: data.owner || data.user_name || 'Unknown Owner',
-            userId: data.user_id || data.userId,
-            type: data.type || data.plant_type || 'Unknown',
-            health: data.health || data.status || 'Unknown',
-            daysGrowing: data.daysGrowing || data.age_days || 0,
-            ...data
-          };
-        });
-
-        console.log('Loaded plants from Firebase:', this.plants.length);
-      } catch (error) {
-        console.error('Error loading plants:', error);
-        throw error;
-      }
-    },
-
-    async loadHarvestsFromFirebase() {
-      try {
-        console.log('Loading harvests from Firebase...');
-        // Try to get harvests from multiple possible sources
-        let harvests = [];
-        
-        // First try a dedicated harvests collection
-        try {
-          const harvestsQuery = query(collection(db, 'harvests'));
-          const harvestSnapshot = await getDocs(harvestsQuery);
-          harvests = harvestSnapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              date: data.date?.toDate?.() || data.harvestDate?.toDate?.() || data.timestamp?.toDate?.() || new Date(),
-              plantName: data.plantName || data.plant_name || 'Unknown Plant',
-              owner: data.owner || data.user_name || 'Unknown Owner',
-              userId: data.user_id || data.userId,
-              yield: data.yield || data.amount || data.quantity || 0,
-              quality: data.quality || data.grade || 'Unknown',
-              growthDuration: data.growthDuration || data.growth_days || data.days_to_harvest || 0,
-              ...data
-            };
-          });
-        } catch (e) {
-          console.log('No dedicated harvests collection found, trying plant subcollections...');
-        }
-        
-        // If no harvests found, try getting from plants subcollections
-        if (harvests.length === 0) {
-          for (const plant of this.plants) {
-            try {
-              const plantHarvests = collection(db, `plants/${plant.id}/harvest_history`);
-              const plantHarvestSnapshot = await getDocs(plantHarvests);
-              
-              plantHarvestSnapshot.docs.forEach(doc => {
-                const data = doc.data();
-                harvests.push({
-                  id: `${plant.id}_${doc.id}`,
-                  date: data.date?.toDate?.() || data.timestamp?.toDate?.() || new Date(),
-                  plantName: plant.name,
-                  owner: plant.owner,
-                  userId: plant.userId,
-                  yield: data.amount || data.yield || data.quantity || 0,
-                  quality: data.quality || data.grade || 'Good',
-                  growthDuration: data.growth_days || 0,
-                  plantId: plant.id,
-                  ...data
-                });
-              });
-            } catch (e) {
-              console.log(`No harvest history for plant ${plant.id}`);
-            }
-          }
-        }
-
-        this.harvests = harvests;
-        console.log('Loaded harvests from Firebase:', this.harvests.length);
-      } catch (error) {
-        console.error('Error loading harvests:', error);
-        this.harvests = []; // Don't throw, just set empty array
-      }
-    },
-
-    async loadAdminsFromFirebase() {
-      try {
-        const adminsSnap = await getDocs(collection(db, 'admins'));
-        const m = new Map();
-        adminsSnap.forEach(d => {
-          const data = d.data() || {};
-          m.set(d.id, !!data.admin);
-        });
-        this.adminsMap = m;
+        this.users = await getAllUsers();
+        this.recomputeUserAggregates();
+        this.lastError = null;
       } catch (e) {
-        console.error('Error loading admins:', e);
-        this.adminsMap = new Map();
-        throw e;
+        this.handleError(e);
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async loadHarvestsData() {
+      this.loading = true;
+      try {
+        this.harvests = await getAllHarvests();
+      } catch (e) {
+        this.handleError(e);
+      } finally {
+        this.loading = false;
       }
     },
 
     setupRealtimeListeners() {
       try {
-        // Real-time listener for users
-        let usersQuery;
-        try {
-          usersQuery = query(collection(db, 'users'), orderBy('joinDate', 'desc'));
-        } catch (e) {
-          usersQuery = query(collection(db, 'users'));
-        }
-        
-        this.unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
-          this.users = snapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              name: data.name || data.displayName || 'Unknown User',
-              email: data.email || '',
-              device: data.device || 'Unknown',
-              plantCount: data.plantCount || 0,
-              totalHarvest: data.totalHarvest || 0,
-              status: data.status || 'Active',
-              joinDate: data.joinDate?.toDate?.() || data.joinDate || new Date(),
-              lastActive: data.lastActive?.toDate?.() || data.lastActive || new Date(),
-              user_id: data.user_id || doc.id,
-              ...data
-            };
-          });
-        }, (error) => {
-          console.error('Users listener error:', error);
-          this.handleFirebaseError(error);
+        this.unsubscribeUsers = setupUsersListener((users) => {
+          this.users = users;
+          this.recomputeUserAggregates();
         });
-
-        // Real-time listener for plants
-        const plantsQuery = query(collection(db, 'plants'));
-        this.unsubscribePlants = onSnapshot(plantsQuery, (snapshot) => {
-          this.plants = snapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              name: data.name || data.plant_name || 'Unnamed Plant',
-              owner: data.owner || data.user_name || 'Unknown Owner',
-              userId: data.user_id || data.userId,
-              type: data.type || data.plant_type || 'Unknown',
-              health: data.health || data.status || 'Unknown',
-              daysGrowing: data.daysGrowing || data.age_days || 0,
-              ...data
-            };
-          });
-        }, (error) => {
-          console.error('Plants listener error:', error);
-          this.handleFirebaseError(error);
+        this.unsubscribePlants = setupPlantsListener((plants) => {
+          this.plants = plants;
+          this.recomputeUserAggregates();
         });
-
-        // Real-time listener for admins registry (if exists)
-        try {
-          const adminsQuery = query(collection(db, 'admins'));
-          this.unsubscribeAdmins = onSnapshot(adminsQuery, (snapshot) => {
-            const m = new Map();
-            snapshot.forEach(d => {
-              const data = d.data() || {};
-              m.set(d.id, !!data.admin);
-            });
-            this.adminsMap = m;
-          }, (error) => {
-            console.warn('Admins collection listener error (this may be normal):', error);
-          });
-        } catch (error) {
-          console.log('No admins collection found, relying on custom claims only');
-        }
-
-        console.log('Real-time listeners setup completed');
-      } catch (error) {
-        console.error('Error setting up listeners:', error);
-        this.handleFirebaseError(error);
+        this.unsubscribeAdmins = setupAdminsListener((admins) => {
+          this.adminsMap = admins;
+        });
+      } catch (e) {
+        this.handleError(e);
       }
     },
 
-    // ------ Helpers ------
-    formatDate(dateString) {
-      if (!dateString) return 'N/A';
-      const date = dateString instanceof Date ? dateString : new Date(dateString);
-      return date.toLocaleDateString();
-    },
+    /* Aggregates: plantCount + device */
+    recomputeUserAggregates() {
+      const agg = new Map(); // uid -> { count, hasPhone, hasHardware }
 
-    formatDateISO(dateString) {
-      if (!dateString) return '';
-      const date = dateString instanceof Date ? dateString : new Date(dateString);
-      return date.toISOString().split('T')[0];
-    },
+      for (const p of this.plants || []) {
+        const uid = p.ownerId || p.user_id || p.userId;
+        if (!uid) continue;
 
-    isUserAdmin(uid) {
-      // Check custom claims first (primary method)
-      const auth = getAuth();
-      const user = auth.currentUser;
-      if (user && user.uid === uid) {
-        // For current user, we can check their token
-        return this.isAdmin;
+        const entry = agg.get(uid) || {
+          count: 0,
+          hasPhone: false,
+          hasHardware: false,
+        };
+        entry.count += 1;
+
+        const m = String(p.mode || "").toLowerCase();
+        if (/(hardware|pi|rasp)/.test(m)) entry.hasHardware = true;
+        if (/(phone|mobile|camera)/.test(m)) entry.hasPhone = true;
+
+        agg.set(uid, entry);
       }
-      
-      // For other users, check the admins collection as fallback
-      return this.adminsMap.get(uid) === true;
+
+      this.users = (this.users || []).map((u) => {
+        const a = agg.get(u.id) || {
+          count: 0,
+          hasPhone: false,
+          hasHardware: false,
+        };
+        let device = u.device || "Unknown";
+        if (a.hasHardware) device = "Raspberry Pi";
+        else if (a.hasPhone) device = "Phone";
+        return { ...u, plantCount: a.count, device };
+      });
+    },
+
+    /* Details modal */
+    openUserDetails(user) {
+      const fresh = this.users.find((x) => x.id === user.id) || user;
+      this.detailUser = fresh;
+      this.showDetails = true;
+      document.documentElement.style.overflow = "hidden";
+    },
+    closeUserDetails() {
+      this.showDetails = false;
+      this.detailUser = null;
+      document.documentElement.style.overflow = "";
+    },
+
+    /* Helpers */
+    formatDate(d) {
+      if (!d) return "N/A";
+      const dt = d instanceof Date ? d : new Date(d);
+      return isNaN(dt) ? "N/A" : dt.toLocaleDateString();
+    },
+    formatDateISO(d) {
+      if (!d) return "";
+      const dt = d instanceof Date ? d : new Date(d);
+      return isNaN(dt) ? "" : dt.toISOString().split("T")[0];
+    },
+
+    isUserAdminCheck(uid) {
+      // Keep admins visible in the table; return true here if you want to hide them
+      return isUserAdmin(uid, this.adminsMap, this.currentUser) && false;
     },
 
     getUserPlants(user) {
-      return this.plants.filter((plant) => 
-        plant.owner === user.name || 
-        plant.userId === user.id || 
-        plant.user_id === user.id ||
-        plant.user_id === user.user_id
-      );
+      return getPlantsByUser(user, this.plants);
     },
-
     getUserHarvests(user) {
-      return this.harvests.filter((harvest) => 
-        harvest.owner === user.name || 
-        harvest.userId === user.id || 
-        harvest.user_id === user.id ||
-        harvest.user_id === user.user_id
-      );
+      return getHarvestsByUser(user, this.harvests);
     },
 
-    // ------ User Actions ------
-    async editUser(user) {
-      try {
-        const userRef = doc(db, 'users', user.id);
-        await updateDoc(userRef, {
-          lastModified: new Date(),
-        });
-
-        // Role management
-        if (this.isUserAdmin(user.id)) {
-          if (confirm(`"${user.email || user.name}" is an ADMIN.\nDo you want to DEMOTE this user?`)) {
-            await this.demoteByUid(user.id);
-          }
-        } else {
-          if (confirm(`Make "${user.email || user.name}" an ADMIN?`)) {
-            await this.promoteByEmail(user.email);
-          }
-        }
-
-        this.showSuccess('User updated successfully');
-      } catch (error) {
-        console.error('Error updating user:', error);
-        this.handleFirebaseError(error);
-      }
-    },
-
-    async deleteUser(userId) {
-      if (this.isUserAdmin(userId)) {
-        this.showError('Cannot delete an admin user. Demote first, then delete.');
-        return;
-      }
-
-      if (confirm("Are you sure you want to delete this user?")) {
-        try {
-          await deleteDoc(doc(db, 'users', userId));
-          this.users = this.users.filter((user) => user.id !== userId);
-          if (this.selectedUser && this.selectedUser.id === userId) {
-            this.selectedUser = null;
-          }
-          this.showSuccess('User deleted successfully');
-        } catch (error) {
-          console.error('Error deleting user:', error);
-          this.handleFirebaseError(error);
-        }
-      }
-    },
-
-    viewUserDetails(user) {
-      this.selectedUser = user;
-    },
-
-    async suspendUser(user) {
-      try {
-        const userRef = doc(db, 'users', user.id);
-        await updateDoc(userRef, {
-          status: user.status === 'Active' ? 'Suspended' : 'Active',
-          lastModified: new Date()
-        });
-        user.status = user.status === 'Active' ? 'Suspended' : 'Active';
-        this.showSuccess(`User ${user.status.toLowerCase()} successfully`);
-      } catch (error) {
-        console.error('Error suspending user:', error);
-        this.handleFirebaseError(error);
-      }
-    },
-
-    // ------ Admin Role Management (Custom Claims) ------
-    async promoteByEmail(email) {
-      if (!email) return;
-      this.busyRole = true;
-      try {
-        // Call your custom function that sets admin custom claims
-        const functions = getFunctions();
-        const setAdminClaim = httpsCallable(functions, 'setAdminClaim');
-        const res = await setAdminClaim({ email, admin: true });
-        
-        this.showSuccess(`Promoted ${email} to admin`);
-        
-        // Force token refresh for current user if they were promoted
-        const auth = getAuth();
-        if (auth.currentUser && auth.currentUser.email === email) {
-          await auth.currentUser.getIdToken(true);
-          await this.checkAdminStatus(auth.currentUser.uid);
-        }
-      } catch (e) {
-        console.error('Error promoting user:', e);
-        this.showError(e.message || String(e));
-      } finally {
-        this.busyRole = false;
-      }
-    },
-
-    async demoteByUid(uid) {
-      if (!uid) return;
-      this.busyRole = true;
-      try {
-        // Call your custom function that removes admin custom claims
-        const functions = getFunctions();
-        const setAdminClaim = httpsCallable(functions, 'setAdminClaim');
-        await setAdminClaim({ uid, admin: false });
-        
-        this.showSuccess('Demoted admin');
-        
-        // Force token refresh for current user if they were demoted
-        const auth = getAuth();
-        if (auth.currentUser && auth.currentUser.uid === uid) {
-          await auth.currentUser.getIdToken(true);
-          await this.checkAdminStatus(auth.currentUser.uid);
-        }
-      } catch (e) {
-        console.error('Error demoting user:', e);
-        this.showError(e.message || String(e));
-      } finally {
-        this.busyRole = false;
-      }
-    },
-
-    // ------ UI Helpers ------
-    viewHarvestDetails(harvest) {
-      console.log("View harvest details:", harvest);
-    },
-
-    editHarvest(harvest) {
-      console.log("Edit harvest:", harvest);
-    },
-
-    showSuccess(message) {
-      // You can replace this with a proper toast notification
-      alert(message);
+    handleError(error) {
+      const message = formatFirebaseError(error);
+      this.lastError = message;
+      this.connectionStatus = "error";
+      console.error(error);
     },
 
     showError(message) {
       this.lastError = message;
-      console.error('Error:', message);
+    },
+
+    showSuccess(message) {
+      alert(message);
+    },
+
+    /* UI stubs */
+    viewHarvestDetails(h) {
+      console.log("View harvest:", h);
+    },
+    editHarvest(h) {
+      console.log("Edit harvest:", h);
     },
   },
 };
 </script>
 
 <style scoped>
-/* Authentication & Permission Guards */
-.auth-guard, .permission-guard {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 80vh;
-}
+/* Keep your existing AdminPage.css styles loaded; only essentials here */
 
-.auth-message, .permission-message {
-  text-align: center;
-  padding: 2rem;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  max-width: 400px;
-}
-
-.sign-in-btn, .sign-out-btn {
-  background: #4285f4;
-  color: white;
-  border: none;
-  padding: 12px 24px;
+.badge-admin {
+  margin-left: 8px;
+  padding: 2px 6px;
+  font-size: 12px;
   border-radius: 6px;
-  cursor: pointer;
-  font-size: 16px;
-  margin-top: 1rem;
+  background: #e9f5ff;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
 }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.35);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+}
+
+.modal-card {
+  width: min(900px, 92vw);
+  max-height: 85vh;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: #333;
+}
+
+.modal-header, .modal-footer {
+  padding: 12px 16px;
+  background: #f7f7f7;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #333;
+}
+
+.modal-body {
+  padding: 16px;
+  overflow: auto;
+  color: #333;
+}
+
+.modal-close {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: #333;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 8px 16px;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.plants-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.plant-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px;
+  background: #fafafa;
+  color: #333;
+}
+
+.plant-name {
+  font-weight: 600;
+  color: #000;
+  margin-bottom: 4px;
+}
+
+.plant-details { color: #555; }
+
+.muted { color: #000; font-weight: 500; }
+
+.btn {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  cursor: pointer;
+  color: #333;
+}
+
+.harvests-table th {
+  background: #f8f9fa;
+  color: #333 !important;
+  font-weight: 600;
+}
+.harvests-table td { color: #333 !important; }
 </style>
