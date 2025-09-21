@@ -97,32 +97,6 @@
       </div>
     </section> -->
 
-    <!-- My Strawberries Section -->
-    <section class="section">
-      <h3 class="section-title">My Strawberries</h3>
-      <div class="strawberries-grid" v-if="userPlants.length">
-        <div
-          class="strawberry-card"
-          v-for="plant in userPlants"
-          :key="plant.id"
-          @click="viewPlant(plant)"
-        >
-          <img
-            :src="plant.latest_photo"
-            :alt="plant.name"
-            class="strawberry-img"
-          />
-          <div class="plant-info">
-            <h5>{{ plant.name }}</h5>
-            <p>{{ formatPlantDate(plant.created_at) }}</p>
-          </div>
-        </div>
-      </div>
-      <div v-else class="empty-plants">
-        <p>No plants yet. <a @click="$router.push('/mydiary')">Add your first plant!</a></p>
-      </div>
-    </section>
-
     <!-- My Achievement Section -->
     <section class="section">
       <h3 class="section-title">My Achievement</h3>
@@ -259,22 +233,6 @@ export default {
           id: doc.id,
           ...doc.data()
         }))
-
-        // Load latest photo for each plant
-        for (const plant of plants) {
-          const uploadsRef = collection(db, 'plants', plant.id, 'uploads')
-          const latestPhotoQuery = query(
-            uploadsRef,
-            orderBy('timestamp', 'desc'),
-            limit(1)
-          )
-          
-          const photoSnapshot = await getDocs(latestPhotoQuery)
-          if (!photoSnapshot.empty) {
-            const latestPhoto = photoSnapshot.docs[0].data()
-            plant.latest_photo = latestPhoto.image_url // Use image_url from upload document
-          }
-        }
         
         this.userPlants = plants
       } catch (error) {
@@ -303,15 +261,21 @@ export default {
         
         this.totalPhotos = photoCount
         
-        // Get harvest count from diary entries
+        // Get harvest count from both diary entries AND harvests subcollection
         let harvestCount = 0
         for (const plant of this.userPlants) {
+          // Count diary entries with type 'harvest'
           const entriesQuery = query(
             collection(db, 'plants', plant.id, 'diary_entries'),
             where('type', '==', 'harvest')
           )
           const entriesSnapshot = await getDocs(entriesQuery)
           harvestCount += entriesSnapshot.size
+
+          // Count records from harvests subcollection (where PhoneHarvest saves)
+          const harvestsQuery = query(collection(db, 'plants', plant.id, 'harvests'))
+          const harvestsSnapshot = await getDocs(harvestsQuery)
+          harvestCount += harvestsSnapshot.size
         }
         
         this.totalHarvests = harvestCount
@@ -373,16 +337,6 @@ export default {
       if (daysDiff < 7) return `${daysDiff} days ago`
       if (daysDiff < 30) return `${Math.floor(daysDiff / 7)} weeks ago`
       return `${Math.floor(daysDiff / 30)} months ago`
-    },
-
-    viewPlant(plant) {
-      this.$router.push({
-        path: '/photolist',
-        query: {
-          plantId: plant.id,
-          plantName: plant.name
-        }
-      })
     },
 
     async handleImageUpload(event) {

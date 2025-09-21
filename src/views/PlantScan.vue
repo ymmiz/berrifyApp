@@ -107,39 +107,55 @@
         </button>
       </div>
 
-      <!-- 🔹 Analysis Results Section -->
-      <div v-if="uploads.length" class="results-section">
-        <h3>Ripeness Results</h3>
+      <!-- View Photos Button - Always available -->
+      <div class="view-photos-section">
+        <button class="btn-view-photos" @click="viewPhotos">
+          <i class="bi bi-images"></i>
+          View All Photos
+        </button>
+        <p class="view-photos-hint">See your complete photo history and analysis results</p>
+      </div>
 
-        <!-- Summary -->
-        <div class="summary">
-          <span class="badge ripe">Ripe: {{ summary.ripe }}</span>
-          <span class="badge unripe">Unripe: {{ summary.unripe }}</span>
-          <span class="badge overripe">Overripe: {{ summary.overripe }}</span>
-          <span class="badge pending" v-if="summary.pending"
-            >Pending: {{ summary.pending }}</span
-          >
-        </div>
+      <!-- Session Results - Only show results from current session -->
+      <div v-if="sessionUploads.length" class="session-results">
+        <h3>Today's Analysis Results</h3>
+        
+        <!-- Summary for session uploads only -->
+        <!-- <div class="summary-cards">
+          <div class="summary-card ripe">
+            <div class="count">{{ summary.ripe }}</div>
+            <div class="label">Ripe</div>
+          </div>
+          <div class="summary-card unripe">
+            <div class="count">{{ summary.unripe }}</div>
+            <div class="label">Unripe</div>
+          </div>
+          <div class="summary-card overripe">
+            <div class="count">{{ summary.overripe }}</div>
+            <div class="label">Overripe</div>
+          </div>
+          <div v-if="summary.pending" class="summary-card pending">
+            <div class="count">{{ summary.pending }}</div>
+            <div class="label">Processing</div>
+          </div>
+        </div> -->
 
-        <!-- List of uploads -->
-        <div class="uploads-list">
-          <div v-for="u in uploads" :key="u.id" class="upload-card">
-            <!-- Show annotated image if available, else fallback to original -->
+        <!-- List of session uploads -->
+        <div class="session-uploads">
+          <div v-for="u in sessionUploads" :key="u.id" class="upload-result">
             <img
               :src="u.annotated_image || u.image_url"
-              class="thumb"
-              :alt="plantName + ' analyzed photo'"
+              class="result-thumb"
+              :alt="plantName + ' analysis result'"
             />
-
-            <div class="info">
-              <span class="badge" :class="u.status">{{ u.status }}</span>
-              <p v-if="u.analysis">
-                Red: {{ u.analysis.red_precent?.toFixed(1) }}% <br />
-                Green: {{ u.analysis.green_precent?.toFixed(1) }}%
-              </p>
+            <div class="upload-info">
+              <span class="status-badge" :class="u.status">{{ u.status }}</span>
+              <div v-if="u.analysis && u.analysis.red_precent !== undefined" class="analysis-details">
+                <p>Red: {{ u.analysis.red_precent?.toFixed(1) }}%</p>
+                <p>Green: {{ u.analysis.green_precent?.toFixed(1) }}%</p>
+              </div>
             </div>
           </div>
-
         </div>
       </div>
     </div>
@@ -176,9 +192,12 @@ export default {
       uploadProgress: 0,
       uploads: [], // results from Firestore
       summary: { ripe: 0, unripe: 0, overripe: 0, pending: 0 },
+      sessionStartTime: null, // Track when this session started
+      sessionUploads: [], // Only uploads from current session
     };
   },
   mounted() {
+    this.sessionStartTime = new Date(); // Mark session start time
     this.loadPlantDetails();
     if (!this.plantId) {
       notify.error("Missing plantId. Please open from a plant card.");
@@ -202,7 +221,22 @@ export default {
           id: doc.id,
           ...doc.data(),
         }));
+        this.filterSessionUploads();
         this.computeSummary();
+      });
+    },
+
+    // Filter uploads to only include those from current session
+    filterSessionUploads() {
+      if (!this.sessionStartTime) {
+        this.sessionUploads = [];
+        return;
+      }
+      
+      this.sessionUploads = this.uploads.filter(upload => {
+        // Check if this upload was created after session started
+        const uploadTime = upload.timestamp?.toDate() || new Date(0);
+        return uploadTime >= this.sessionStartTime;
       });
     },
 
@@ -241,7 +275,9 @@ export default {
 
     async computeSummary() {
       const counts = { ripe: 0, unripe: 0, overripe: 0, pending: 0 };
-      for (const u of this.uploads) {
+      
+      // Only count session uploads for display
+      for (const u of this.sessionUploads) {
         if (u.status === "ripe") counts.ripe++;
         else if (u.status === "unripe") counts.unripe++;
         else if (u.status === "overripe") counts.overripe++;
@@ -249,11 +285,22 @@ export default {
       }
       this.summary = counts;
 
-      // 🔹 NEW: write to plant doc so main card updates
-      try {
-        await this.writeSummaryToPlant(counts);
-      } catch (e) {
-        console.error("Failed to update plant summary:", e);
+      // But write ALL uploads to plant doc for overall tracking
+      const allCounts = { ripe: 0, unripe: 0, overripe: 0, pending: 0 };
+      for (const u of this.uploads) {
+        if (u.status === "ripe") allCounts.ripe++;
+        else if (u.status === "unripe") allCounts.unripe++;
+        else if (u.status === "overripe") allCounts.overripe++;
+        else allCounts.pending++;
+      }
+
+      // Only update plant doc if we have session uploads
+      if (this.sessionUploads.length > 0) {
+        try {
+          await this.writeSummaryToPlant(allCounts);
+        } catch (e) {
+          console.error("Failed to update plant summary:", e);
+        }
       }
     },
 
@@ -326,6 +373,15 @@ export default {
     },
     goBack() {
       this.$router.push("/mydiary");
+    },
+    viewPhotos() {
+      this.$router.push({
+        path: '/photolist',
+        query: { 
+          plantId: this.plantId, 
+          plantName: this.plantName 
+        }
+      });
     },
   },
 };
@@ -417,7 +473,7 @@ export default {
   color: #8ab58a;
 }
 .upload-content h3 {
-  very: 24px;
+  font-size: 24px;
   font-weight: 700;
   color: #2c3e50;
   margin: 0;
@@ -549,6 +605,47 @@ export default {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* View Photos Section */
+.view-photos-section {
+  text-align: center;
+  margin-top: 24px;
+  padding: 20px;
+  background: rgba(138, 181, 138, 0.08);
+  border-radius: 16px;
+  border: 2px dashed rgba(138, 181, 138, 0.3);
+}
+
+.btn-view-photos {
+  background: linear-gradient(135deg, #6c8e6c, #4a7c4a);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 14px 24px;
+  font-size: 16px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 6px 20px rgba(108, 142, 108, 0.3);
+  text-transform: none;
+}
+
+.btn-view-photos:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(108, 142, 108, 0.4);
+  background: linear-gradient(135deg, #4a7c4a, #6c8e6c);
+}
+
+.view-photos-hint {
+  margin: 12px 0 0 0;
+  font-size: 14px;
+  color: #6b7b8a;
+  font-style: italic;
+}
+
 @media (max-width: 768px) {
   .page-content {
     padding: 24px;
@@ -556,63 +653,151 @@ export default {
   .thumb-grid {
     grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   }
+  .summary-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .session-uploads {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
 }
 
-/* 🔹 Badge styles */
-.badge {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: white;
-  text-transform: capitalize;
-}
-.badge.ripe {
-  background-color: #4caf50;
-}
-.badge.unripe {
-  background-color: #ff9800;
-}
-.badge.overripe {
-  background-color: #f44336;
-}
-.badge.pending {
-  background-color: #9e9e9e;
-}
-.badge.error {
-  background-color: #607d8b;
-}
-
-.results-section {
+/* Session Results Styles */
+.session-results {
   margin-top: 32px;
+  padding: 24px;
+  background: rgba(138, 181, 138, 0.05);
+  border-radius: 16px;
+  border: 2px solid rgba(138, 181, 138, 0.2);
 }
-.summary {
-  display: flex;
+
+.session-results h3 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #2c3e50;
+  margin: 0 0 20px 0;
+  text-align: center;
+}
+
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
-.uploads-list {
-  display: flex;
-  flex-wrap: wrap;
+
+.summary-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px 12px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-left: 4px solid;
+  transition: transform 0.2s ease;
+}
+
+.summary-card:hover {
+  transform: translateY(-2px);
+}
+
+.summary-card.ripe {
+  border-left-color: #4caf50;
+}
+
+.summary-card.unripe {
+  border-left-color: #ff9800;
+}
+
+.summary-card.overripe {
+  border-left-color: #f44336;
+}
+
+.summary-card.pending {
+  border-left-color: #9e9e9e;
+}
+
+.summary-card .count {
+  font-size: 28px;
+  font-weight: 800;
+  color: #2c3e50;
+  margin-bottom: 4px;
+}
+
+.summary-card .label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6b7b8a;
+}
+
+.session-uploads {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 16px;
 }
-.upload-card {
-  width: 200px;
-  padding: 12px;
-  border: 1px solid #ddd;
+
+.upload-result {
+  background: #fff;
   border-radius: 12px;
-  background: #fafafa;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+  padding: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s ease;
 }
-.upload-card .thumb {
+
+.upload-result:hover {
+  transform: translateY(-2px);
+}
+
+.result-thumb {
   width: 100%;
-  height: 140px;
+  height: 120px;
   object-fit: cover;
   border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.upload-info {
+  text-align: center;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   margin-bottom: 8px;
 }
-.upload-card .info {
-  text-align: center;
+
+.status-badge.ripe {
+  background: #4caf50;
+  color: white;
+}
+
+.status-badge.unripe {
+  background: #ff9800;
+  color: white;
+}
+
+.status-badge.overripe {
+  background: #f44336;
+  color: white;
+}
+
+.status-badge.pending {
+  background: #9e9e9e;
+  color: white;
+}
+
+.analysis-details {
+  font-size: 14px;
+  color: #6b7b8a;
+}
+
+.analysis-details p {
+  margin: 4px 0;
+  font-weight: 600;
 }
 </style>

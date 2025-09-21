@@ -17,14 +17,55 @@ body {
 .signup-link {
   margin-top: 20px;
   text-align: center;
+  color: white;
+  font-size: 1.1rem;
+  font-weight: 600;
 }
 
 .signup-link span {
-  cologin-pager: blue;
-  font-weight: bold;
+  color: #222;
+  text-decoration: none;
+  font-weight: 700;
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
   cursor: pointer;
 }
 
+.signup-link span:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: #FFD700;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
+}
+
+.login-link {
+  margin-top: 20px;
+  text-align: center;
+  color: white;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.login-link a {
+  color: #222;
+  text-decoration: none;
+  font-weight: 700;
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+}
+
+.login-link a:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: #FFD700;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
+}
 
 .form-container {
   display: flex;

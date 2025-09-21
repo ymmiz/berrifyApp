@@ -1,102 +1,62 @@
 <template>
   <div class="page-container">
-    <!-- Back Button -->
-    <div class="back-button" @click="goBack">
-      &larr;
-    </div>
+    <div class="back-button" @click="goBack"> &larr; </div>
 
-    <!-- Page Header -->
     <div class="page-header">
       <h1 class="page-title">Harvest {{ plantName }}</h1>
       <p class="page-subtitle">Record your strawberry harvest</p>
     </div>
 
-    <!-- Page Content -->
     <div class="page-content">
-      <!-- Harvest Card -->
       <div class="harvest-card">
         <h2>How many strawberries did you harvest?</h2>
         <p class="harvest-description">
           Enter the number of strawberries you collected from {{ plantName }}
         </p>
 
-        <!-- Number Input -->
         <div class="number-input-section">
           <div class="number-input-container">
-            <button
-              class="decrease-btn"
-              @click="decreaseCount"
-              :disabled="harvestCount <= 0"
-            >
-              −
-            </button>
-
-            <input
-              type="number"
-              v-model.number="harvestCount"
-              min="0"
-              max="100"
-              class="harvest-input"
-              @input="validateInput"
-            />
-
-            <button class="increase-btn" @click="increaseCount"> + </button>
+            <button class="decrease-btn" @click="decreaseCount" :disabled="harvestCount <= 0">−</button>
+            <input type="number" v-model.number="harvestCount" min="0" max="100"
+                   class="harvest-input" @input="validateInput"/>
+            <button class="increase-btn" @click="increaseCount">+</button>
           </div>
-
-          <div class="input-label">
-            <span>Strawberries</span>
-          </div>
+          <div class="input-label"><span>Strawberries</span></div>
         </div>
 
-        <!-- Quick Select Buttons -->
         <div class="quick-select">
           <h3>Quick Select</h3>
           <div class="quick-buttons">
-            <button
-              v-for="count in quickCounts"
-              :key="count"
-              class="quick-btn"
-              :class="{ active: harvestCount === count }"
-              @click="setCount(count)"
-            >
-              {{ count }}
+            <button v-for="n in quickCounts" :key="n"
+                    class="quick-btn" :class="{ active: harvestCount === n }"
+                    @click="setCount(n)">
+              {{ n }}
             </button>
           </div>
         </div>
 
-        <!-- Harvest History Preview -->
-        <div v-if="previousHarvests.length > 0" class="history-preview">
+        <div v-if="previousHarvests.length" class="history-preview">
           <h3>Previous Harvests</h3>
           <div class="history-items">
-            <div
-              v-for="(harvest, index) in previousHarvests.slice(0, 3)"
-              :key="index"
-              class="history-item"
-            >
-              <span class="history-count">{{ harvest.count }} strawberries</span>
-              <span class="history-date">{{ formatDate(harvest.date) }}</span>
+            <div v-for="(h, i) in previousHarvests.slice(0,3)" :key="i" class="history-item">
+              <span class="history-count">{{ h.count }} strawberries</span>
+              <span class="history-date">{{ formatDate(h.date) }}</span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Action Buttons -->
       <div class="action-buttons">
-        <button class="btn-secondary" @click="goBack"> Cancel </button>
-        <button
-          class="btn-primary"
-          @click="saveHarvest"
-          :disabled="harvestCount < 0"
-        >
-          Save Harvest
-        </button>
+        <button class="btn-secondary" @click="goBack">Cancel</button>
+        <button class="btn-primary" @click="saveHarvest" :disabled="harvestCount < 0">Save Harvest</button>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import { uploadPlantPhoto } from "../scripts/uploadService.js";
+import { db, auth } from "@/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 export default {
   name: "PhoneHarvest",
@@ -106,8 +66,7 @@ export default {
       plantId: null,
       harvestCount: 0,
       quickCounts: [5, 10, 15, 20, 25],
-      previousHarvests: [],
-      uploading: false,
+      previousHarvests: []
     };
   },
   mounted() {
@@ -116,130 +75,71 @@ export default {
   },
   methods: {
     loadPlantDetails() {
-      if (this.$route.query.plantName) {
-        this.plantName = this.$route.query.plantName;
-      }
-      if (this.$route.query.plantId) {
-        this.plantId = this.$route.query.plantId;
-      }
+      if (this.$route.query.plantName) this.plantName = this.$route.query.plantName;
+      if (this.$route.query.plantId) this.plantId = this.$route.query.plantId;
     },
-
     loadHarvestHistory() {
-      const historyKey = this.plantId
-        ? `harvestHistory_${this.plantId}`
-        : "harvestHistory_default";
-      const savedHistory = localStorage.getItem(historyKey);
-
-      if (savedHistory) {
-        this.previousHarvests = JSON.parse(savedHistory);
-        this.previousHarvests.sort(
-          (a, b) => new Date(b.date) - new Date(a.date)
-        );
+      const key = this.plantId ? `harvestHistory_${this.plantId}` : "harvestHistory_default";
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        this.previousHarvests = JSON.parse(saved).sort((a,b)=>new Date(b.date)-new Date(a.date));
       }
     },
-
-    increaseCount() {
-      if (this.harvestCount < 100) {
-        this.harvestCount++;
-      }
+    increaseCount(){ if (this.harvestCount < 100) this.harvestCount++; },
+    decreaseCount(){ if (this.harvestCount > 0) this.harvestCount--; },
+    setCount(n){ this.harvestCount = n; },
+    validateInput(){
+      if (this.harvestCount < 0) this.harvestCount = 0;
+      if (this.harvestCount > 100) this.harvestCount = 100;
     },
-
-    decreaseCount() {
-      if (this.harvestCount > 0) {
-        this.harvestCount--;
-      }
-    },
-
-    setCount(count) {
-      this.harvestCount = count;
-    },
-
-    validateInput() {
-      if (this.harvestCount < 0) {
-        this.harvestCount = 0;
-      } else if (this.harvestCount > 100) {
-        this.harvestCount = 100;
-      }
-    },
-
     async saveHarvest() {
       if (this.harvestCount < 0) return;
+      const user = auth.currentUser;
+      if (!user) { console.error("No logged in user"); return; }
 
+      // ✅ COUNT-ONLY payload
       const harvestData = {
         count: this.harvestCount,
-        date: new Date().toISOString(),
+        date: serverTimestamp(),
         plantName: this.plantName,
         plantId: this.plantId,
+        user_id: user.uid,
+        owner: user.email || "Unknown",
+        quality: "Unknown"
       };
 
-      this.previousHarvests.unshift(harvestData);
-      if (this.previousHarvests.length > 20) {
-        this.previousHarvests = this.previousHarvests.slice(0, 20);
-      }
-
-      const historyKey = this.plantId
-        ? `harvestHistory_${this.plantId}`
-        : "harvestHistory_default";
-      localStorage.setItem(historyKey, JSON.stringify(this.previousHarvests));
-
-      this.updateTotalHarvest();
-
       try {
-        this.uploading = true;
+        await addDoc(collection(db, "plants", this.plantId, "harvests"), harvestData);
 
-        // 🔑 Call upload service (with harvestCount passed to analysis)
-        // For now, no file picker here; you’d pass the latest uploaded file if available
-        // Example: if you want to trigger analysis only, you can call uploadPlantPhoto without file
+        // local preview
+        this.previousHarvests.unshift({ ...harvestData, date: new Date().toISOString() });
+        if (this.previousHarvests.length > 20) this.previousHarvests = this.previousHarvests.slice(0,20);
+        const key = this.plantId ? `harvestHistory_${this.plantId}` : "harvestHistory_default";
+        localStorage.setItem(key, JSON.stringify(this.previousHarvests));
 
-        // await uploadPlantPhoto(this.plantId, file, "phone", this.harvestCount)
+        // Emit event to refresh profile stats if user is on profile page
+        this.$root.$emit('harvest-saved');
 
+        this.$router.push({ path: "/analysis", query: {
+          plantId: this.plantId, plantName: this.plantName, harvestCount: this.harvestCount
+        }});
       } catch (err) {
-        console.error("Upload/analysis failed:", err);
-      } finally {
-        this.uploading = false;
+        console.error("Failed to save harvest:", err);
       }
-
-      // ✅ Redirect to Analysis page
-      this.$router.push({
-        path: "/analysis",
-        query: {
-          plantId: this.plantId,
-          plantName: this.plantName,
-          harvestCount: this.harvestCount,
-        },
-      });
     },
-
-    updateTotalHarvest() {
-      const totalStrawberries = this.previousHarvests.reduce(
-        (total, harvest) => total + harvest.count,
-        0
-      );
-      const totalKey = this.plantId
-        ? `totalHarvest_${this.plantId}`
-        : "totalHarvest_default";
-      localStorage.setItem(totalKey, totalStrawberries.toString());
+    formatDate(d){
+      const dt = new Date(d);
+      const diff = (Date.now() - dt.getTime())/(1000*60*60*24);
+      if (diff < 1) return "Today";
+      if (diff < 2) return "Yesterday";
+      if (diff < 7) return `${Math.floor(diff)} days ago`;
+      return dt.toLocaleDateString();
     },
-
-    formatDate(dateString) {
-      const date = new Date(dateString);
-      const today = new Date();
-      const diffTime = today - date;
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-      if (diffDays === 0) return "Today";
-      if (diffDays === 1) return "Yesterday";
-      if (diffDays < 7) return `${diffDays} days ago`;
-
-      return date.toLocaleDateString();
-    },
-
-    goBack() {
-      this.$router.push("/mydiary");
-    },
-  },
+    goBack(){ this.$router.push("/mydiary"); }
+  }
 };
 </script>
+
 
 <style scoped>
 /* 🔹 Same CSS as your version (kept unchanged for design) */

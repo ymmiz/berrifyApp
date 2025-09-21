@@ -52,16 +52,16 @@
               </div>
 
               <div class="mode-badge" :class="plant.mode">
-                <i :class="plant.trackingIcon || 'bi bi-camera'"></i>
-                {{ plant.mode === 'hardware' ? 'Hardware Device' : 'Phone Camera' }}
+                <i :class="plant.trackingIcon || (plant.mode === 'hardware' ? 'bi bi-cpu' : 'bi bi-upload')"></i>
+                {{ plant.mode === 'hardware' ? 'Hardware Device' : 'Photo Analysis' }}
               </div>
 
               <p class="tracking-description">
-                <i :class="plant.trackingIcon || 'bi bi-camera'"></i>
-                {{ plant.trackingDescription || 'Tracking: Phone Camera - Manual photo scanning' }}
+                <i :class="plant.trackingIcon || (plant.mode === 'hardware' ? 'bi bi-cpu' : 'bi bi-upload')"></i>
+                {{ plant.trackingDescription || (plant.mode === 'hardware' ? 'Tracking: Hardware Device - Real-time monitoring' : 'Tracking: Photo Analysis - Upload photos for analysis') }}
               </p>
-              <p>{{ plant.status || 'Not yet scanned' }}</p>
-              <p class="status-alert">{{ plant.statusAlert || 'Scan to check status' }}</p>
+              <p>{{ plant.status || (plant.mode === 'hardware' ? 'Not yet scanned' : 'Upload photos for analysis') }}</p>
+              <p class="status-alert">{{ plant.statusAlert || (plant.mode === 'hardware' ? 'Scan to check status' : 'Upload strawberry photos to get analysis') }}</p>
 
               <div
                 v-if="plant.mode === 'hardware' && plant.moisture !== null && plant.moisture !== undefined"
@@ -88,7 +88,7 @@
                   v-else
                   class="scan-btn"
                   :to="{ name:'PlantScan', query:{ plantId: plant.id, plantName: plant.name } }">
-                  <i class="bi bi-qr-code-scan"></i> Scan Now
+                  <i class="bi bi-upload"></i> Upload Picture
                 </router-link>
 
                 <!-- Water button -->
@@ -111,15 +111,6 @@
                   }}
                 </button>
 
-                <button
-                  v-if="plant.mode === 'hardware'"
-                  class="moisture-btn"
-                  @click="measurePlantSoilMoisture(plant)"
-                >
-                  <i class="bi bi-droplet"></i>
-                  Soil Moisture
-                </button>
-
                <router-link
                 v-if="plant.mode === 'phone'"
                 class="harvest-btn" 
@@ -127,13 +118,13 @@
                   <i class="bi bi-scissors"></i>
                   I want to harvest now
                 </router-link>
-                <!-- <router-link
+                <router-link
                 v-else
                 class="harvest-btn" 
-                :to="{ name:'StrawberryRanking', query:{ plantId: plant.id, plantName: plant.name } }">
+                :to="{ name:'PhoneHarvest', query:{ plantId: plant.id, plantName: plant.name, action: 'harvest' } }">
                   <i class="bi bi-scissors"></i>
                   I want to harvest now
-                </router-link> -->
+                </router-link>
               </div>
             </div>
 
@@ -178,14 +169,14 @@
               :class="{ selected: selectedMode === 'phone' }"
               @click="selectMode('phone')"
             >
-              <div class="mode-icon"><i class="bi bi-camera"></i></div>
+              <div class="mode-icon"><i class="bi bi-upload"></i></div>
               <div class="mode-content">
-                <h3>Phone Reminders</h3>
-                <p>Manual care tracking with reminders</p>
+                <h3>Photo Analysis</h3>
+                <p>Upload strawberry photos for analysis</p>
                 <ul>
-                  <li>Care reminders and notifications</li>
-                  <li>Manual watering tracking</li>
-                  <li>Simple growth monitoring</li>
+                  <li>Upload strawberry pictures from gallery</li>
+                  <li>Automated ripeness analysis</li>
+                  <li>Growth and health assessment</li>
                 </ul>
               </div>
             </div>
@@ -209,8 +200,8 @@
           </div>
 
           <div v-if="selectedMode" class="mode-badge" :class="selectedMode" title="Tracking mode is fixed">
-            <i :class="selectedMode === 'hardware' ? 'bi bi-cpu' : 'bi bi-camera'"></i>
-            {{ selectedMode === 'hardware' ? 'Hardware Device' : 'Phone Camera' }}
+            <i :class="selectedMode === 'hardware' ? 'bi bi-cpu' : 'bi bi-upload'"></i>
+            {{ selectedMode === 'hardware' ? 'Hardware Device' : 'Photo Analysis' }}
           </div>
         </div>
       </div>
@@ -290,10 +281,28 @@ export default {
         .sort((a, b) => numFromName(a.name) - numFromName(b.name)) // ASC: 1,2,3...
         .map(plant => {
           const ts = plant.lastWateredAt || plant.last_watered
+          const hasPhoto = !!(plant.photo_count > 0 || plant.last_photo_url || plant.latestPhotoPath || plant.firstPhotoAt)
+          
+          // Update status based on mode and photo availability
+          let status = plant.status
+          let statusAlert = plant.statusAlert
+          
+          if (plant.mode === 'phone') {
+            if (hasPhoto) {
+              status = 'Photos uploaded for analysis'
+              statusAlert = 'Analysis completed - check results'
+            } else {
+              status = 'Upload photos for analysis'
+              statusAlert = 'Upload strawberry photos to get analysis'
+            }
+          }
+          
           return {
             ...plant,
+            status,
+            statusAlert,
             wateredToday: this.isWateredToday(ts),
-            hasPhoto: !!(plant.photo_count > 0 || plant.last_photo_url || plant.latestPhotoPath || plant.firstPhotoAt)
+            hasPhoto
           }
         })
     },
@@ -508,7 +517,6 @@ export default {
     onCalendarReady() {},
     onViewChange() {},
     harvestPlant(plant) { alert(`Harvest feature coming soon!\n\nPlant: ${plant.name}`) },
-    measurePlantSoilMoisture(plant) { alert(`Moisture measurement coming soon!\n\nPlant: ${plant.name}\nMode: ${plant.mode}`) },
 
     /* ---------------------------- Photo check ----------------------------- */
     async ensurePlantHasPhoto(plant) {

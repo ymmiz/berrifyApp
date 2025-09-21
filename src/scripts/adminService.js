@@ -5,7 +5,8 @@ import {
   doc,
   updateDoc,
   query,
-  onSnapshot
+  onSnapshot,
+  collectionGroup
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
@@ -133,26 +134,29 @@ export const getAllPlants = async () => {
 
 export const getAllHarvests = async () => {
   try {
-    const snap = await getDocs(collection(db, 'harvests')); // ok if empty
+    // 🔎 Look through all "harvests" subcollections under any plant
+    const snap = await getDocs(collectionGroup(db, "harvests"));
+
     return snap.docs.map(d => {
       const data = d.data();
       return {
         id: d.id,
         date: data.date?.toDate?.() || data.harvestDate?.toDate?.() || data.date || data.harvestDate || null,
-        plantName: data.plantName || data.plant_name || 'Unknown Plant',
-        owner: data.owner || data.user_name || 'Unknown Owner',
+        plantName: data.plantName || data.plant_name || "Unknown Plant",
+        owner: data.owner || data.user_name || "Unknown Owner",
         userId: data.user_id || data.userId,
         yield: data.yield ?? data.amount ?? data.quantity ?? 0,
-        quality: data.quality || data.grade || 'Unknown',
+        quality: data.quality || data.grade || "Unknown",
         growthDuration: data.growthDuration ?? data.growth_days ?? 0,
         ...data
       };
     });
   } catch (error) {
-    console.error('Error loading harvests:', error);
+    console.error("Error loading harvests:", error);
     return [];
   }
 };
+
 
 export const getAllAdmins = async () => {
   try {
@@ -302,3 +306,4 @@ export const getUserHarvests = (user, harvests) => {
 export function isUserAdmin(uid, adminsMap /*, currentUser */) {
   return adminsMap instanceof Map ? adminsMap.get(uid) === true : false;
 }
+

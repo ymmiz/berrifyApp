@@ -405,6 +405,11 @@ export async function deletePlantCascade (plantId) {
     console.log('Deleting subcollections...')
     await deleteSubcollection(parentPath, 'diary_entries')
     await deleteSubcollection(parentPath, 'uploads')
+    await deleteSubcollection(parentPath, 'harvests')          // ✅ added
+    // Optional extras (uncomment if you use them)
+    // await deleteSubcollection(parentPath, 'photos')
+    // await deleteSubcollection(parentPath, 'watering_history')
+    // await deleteSubcollection(parentPath, 'measurements')
 
     // Step 3: Delete parent document
     console.log('Deleting parent plant document...')
@@ -466,19 +471,6 @@ export function createPlantData (name, mode) {
     moisture: null,
   }
 }
-
-/**
- * Helper functions to derive display values from trackMode
- */
-// export function getTrackingIcon(trackMode) {
-//   return inferIconFromMode(trackMode)
-// }
-
-// export function getTrackingDescription(trackMode) {
-//   return trackMode === 'hardware' 
-//     ? 'Tracking: Hardware Device - Real-time monitoring with specialized sensors'
-//     : 'Tracking: Phone Camera - Manual photo scanning'
-// }
 
 /* ------------------------- One-time migration ------------------------- */
 

@@ -1,6 +1,6 @@
 <template>
   <div class="admin-dashboard">
-    <!-- Auth guard -->
+    <!-- Auth -->
     <div v-if="!isAuthenticated" class="auth-guard">
       <div class="auth-message">
         <h2>🔐 Admin Authentication Required</h2>
@@ -11,7 +11,7 @@
       </div>
     </div>
 
-    <!-- Permission guard -->
+    <!-- No admin -->
     <div v-else-if="!isAdmin" class="permission-guard">
       <div class="permission-message">
         <h2>⚠️ Access Denied</h2>
@@ -20,7 +20,7 @@
       </div>
     </div>
 
-    <!-- Main dashboard -->
+    <!-- Main -->
     <div v-else>
       <div class="dashboard-header">
         <div class="header-content">
@@ -98,12 +98,12 @@
                   </td>
                 </tr>
 
-                <tr v-for="user in sortedUsers" :key="user.id">
+                <tr v-for="user in sortedUsers" :key="user.id || user.uid">
                   <td class="user-cell">
                     <div class="user-info">
                       <div class="user-name">
                         {{ user.name || 'Unknown' }}
-                        <span v-if="adminsMap.get(user.id) === true" class="badge-admin">ADMIN</span>
+                        <span v-if="adminsMap.get(user.id || user.uid) === true" class="badge-admin">ADMIN</span>
                       </div>
                       <div class="user-email">{{ user.email || 'No email' }}</div>
                     </div>
@@ -178,15 +178,13 @@
                         <th>Date</th>
                         <th>Plant</th>
                         <th>Yield</th>
-                        <th>Quality</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr v-for="h in selectedUserHarvests" :key="h.id">
                         <td>{{ formatDate(h.date) }}</td>
                         <td>{{ h.plantName || 'Unknown' }}</td>
-                        <td>{{ h.yield ?? 0 }}</td>
-                        <td>{{ h.quality || 'Unknown' }}</td>
+                        <td>{{ getCount(h) }}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -202,7 +200,7 @@
         </div>
       </div>
 
-      <!-- Harvest tab -->
+      <!-- Harvests tab -->
       <div v-if="activeTab === 'harvests'" class="tab-content">
         <div class="table-header">
           <h2>Harvest Records</h2>
@@ -222,14 +220,11 @@
                 <th>Plant</th>
                 <th>Owner</th>
                 <th>Strawberries</th>
-                <th>Quality</th>
-                <th>Growth Duration</th>
-                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="filteredHarvests.length === 0">
-                <td colspan="7" class="empty-state">
+                <td colspan="4" class="empty-state">
                   {{ loading ? 'Loading harvests...' : 'No harvest records found' }}
                 </td>
               </tr>
@@ -237,25 +232,13 @@
                 <td>{{ formatDate(harvest.date) }}</td>
                 <td>{{ harvest.plantName || 'Unknown' }}</td>
                 <td>{{ harvest.owner || 'Unknown' }}</td>
-                <td><strong>{{ harvest.yield || 0 }}</strong></td>
-                <td>
-                  <span :class="['quality-badge', (harvest.quality || 'unknown').toLowerCase()]">
-                    {{ harvest.quality || 'Unknown' }}
-                  </span>
-                </td>
-                <td>{{ harvest.growthDuration || 0 }} days</td>
-                <td>
-                  <div class="action-buttons">
-                    <button class="action-btn view" @click="viewHarvestDetails(harvest)">👁️</button>
-                    <button class="action-btn edit" @click="editHarvest(harvest)">✏️</button>
-                  </div>
-                </td>
+                <td><strong>{{ getCount(harvest) }}</strong></td>
               </tr>
             </tbody>
           </table>
         </div>
       </div>
-      <!-- /Harvest tab -->
+      <!-- /Harvests tab -->
     </div>
   </div>
 </template>
@@ -296,11 +279,9 @@ export default {
       isAdmin: false,
       signingIn: false,
 
-      // Connection
+      // Connection/UI
       connectionStatus: "unknown",
       lastError: null,
-
-      // UI
       activeTab: "users",
       searchQuery: "",
       userSortBy: "harvest",
@@ -317,13 +298,13 @@ export default {
       harvests: [],
       adminsMap: new Map(),
 
-      // Unsubs
+      // Listeners
       unsubscribeUsers: null,
       unsubscribeHarvests: null,
       unsubscribePlants: null,
       unsubscribeAdmins: null,
 
-      // Details modal state
+      // Details modal
       showDetails: false,
       detailUser: null,
     };
@@ -332,12 +313,9 @@ export default {
   computed: {
     connectionStatusText() {
       switch (this.connectionStatus) {
-        case "connected":
-          return "🟢 Connected to Firebase";
-        case "error":
-          return "🔴 Connection Error";
-        default:
-          return "🟡 Checking Connection...";
+        case "connected": return "🟢 Connected to Firebase";
+        case "error": return "🔴 Connection Error";
+        default: return "🟡 Checking Connection...";
       }
     },
 
@@ -355,20 +333,11 @@ export default {
     sortedUsers() {
       const users = [...this.filteredUsers];
       switch (this.userSortBy) {
-        case "harvest":
-          return users.sort((a, b) => (b.totalHarvest || 0) - (a.totalHarvest || 0));
-        case "name":
-          return users.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-        case "joinDate":
-          return users.sort(
-            (a, b) => new Date(a.joinDate || 0) - new Date(b.joinDate || 0)
-          );
-        case "lastActive":
-          return users.sort(
-            (a, b) => new Date(b.lastActive || 0) - new Date(a.lastActive || 0)
-          );
-        default:
-          return users;
+        case "harvest": return users.sort((a,b)=>(b.totalHarvest||0)-(a.totalHarvest||0));
+        case "name": return users.sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+        case "joinDate": return users.sort((a,b)=>new Date(a.joinDate||0)-new Date(b.joinDate||0));
+        case "lastActive": return users.sort((a,b)=>new Date(b.lastActive||0)-new Date(a.lastActive||0));
+        default: return users;
       }
     },
 
@@ -398,7 +367,7 @@ export default {
   },
 
   methods: {
-    /* Auth */
+    /* ---------- Auth ---------- */
     setupAuthListener() {
       const auth = getAuth();
       onAuthStateChanged(auth, async (user) => {
@@ -407,7 +376,6 @@ export default {
 
         if (user) {
           await ensureUserDoc(user.uid);
-          // checkAdminStatus may return boolean; that's enough here
           this.isAdmin = !!(await checkAdminStatus());
           if (this.isAdmin) await this.initializeAdminDashboard();
         } else {
@@ -438,7 +406,7 @@ export default {
       }
     },
 
-    /* Init */
+    /* ---------- Init ---------- */
     async initializeAdminDashboard() {
       const ok = await testFirebaseConnection();
       this.connectionStatus = ok ? "connected" : "error";
@@ -460,7 +428,7 @@ export default {
       this.adminsMap = new Map();
     },
 
-    /* Loading */
+    /* ---------- Loading ---------- */
     async loadAllData() {
       this.loading = true;
       try {
@@ -472,9 +440,10 @@ export default {
         ]);
         this.users = users;
         this.plants = plants;
-        this.harvests = harvests;
+        this.harvests = this.normalizeHarvests(harvests); // keep quality if present, just don't render
         this.adminsMap = admins;
 
+        this.updateHarvestOwners();
         this.recomputeUserAggregates();
         this.lastError = null;
       } catch (e) {
@@ -489,6 +458,7 @@ export default {
       try {
         this.users = await getAllUsers();
         this.recomputeUserAggregates();
+        this.updateHarvestOwners();
         this.lastError = null;
       } catch (e) {
         this.handleError(e);
@@ -500,7 +470,9 @@ export default {
     async loadHarvestsData() {
       this.loading = true;
       try {
-        this.harvests = await getAllHarvests();
+        this.harvests = this.normalizeHarvests(await getAllHarvests());
+        this.updateHarvestOwners();
+        this.recomputeUserAggregates();
       } catch (e) {
         this.handleError(e);
       } finally {
@@ -513,6 +485,7 @@ export default {
         this.unsubscribeUsers = setupUsersListener((users) => {
           this.users = users;
           this.recomputeUserAggregates();
+          this.updateHarvestOwners();
         });
         this.unsubscribePlants = setupPlantsListener((plants) => {
           this.plants = plants;
@@ -526,44 +499,57 @@ export default {
       }
     },
 
-    /* Aggregates: plantCount + device */
-    recomputeUserAggregates() {
-      const agg = new Map(); // uid -> { count, hasPhone, hasHardware }
+    /* ---------- Aggregates & helpers ---------- */
+    // Read "count" only for UI (preserves 0; supports nested data.count)
+    getCount(h) {
+      const vals = [h?.count, h?.data?.count];
+      for (const v of vals) {
+        if (v === 0) return 0;
+        if (v == null) continue;
+        const n = typeof v === "string" ? parseFloat(v) : v;
+        if (Number.isFinite(n)) return n;
+      }
+      return 0;
+    },
 
+    recomputeUserAggregates() {
+      // plants
+      const plantAgg = new Map(); // uid -> { count, hasPhone, hasHardware }
       for (const p of this.plants || []) {
         const uid = p.ownerId || p.user_id || p.userId;
         if (!uid) continue;
-
-        const entry = agg.get(uid) || {
-          count: 0,
-          hasPhone: false,
-          hasHardware: false,
-        };
+        const entry = plantAgg.get(uid) || { count: 0, hasPhone: false, hasHardware: false };
         entry.count += 1;
-
         const m = String(p.mode || "").toLowerCase();
         if (/(hardware|pi|rasp)/.test(m)) entry.hasHardware = true;
         if (/(phone|mobile|camera)/.test(m)) entry.hasPhone = true;
-
-        agg.set(uid, entry);
+        plantAgg.set(uid, entry);
       }
 
+      // harvest totals (count-only for UI)
+      const harvestAgg = new Map();
+      for (const h of this.harvests || []) {
+        const uid = h.user_id || h.owner_uid || h.userId || h?.data?.user_id || h?.data?.userId;
+        if (!uid) continue;
+        const qty = this.getCount(h);
+        harvestAgg.set(uid, (harvestAgg.get(uid) || 0) + qty);
+      }
+
+      // merge into users (key by id || uid)
       this.users = (this.users || []).map((u) => {
-        const a = agg.get(u.id) || {
-          count: 0,
-          hasPhone: false,
-          hasHardware: false,
-        };
+        const key = u.id || u.uid;
+        const p = plantAgg.get(key) || { count: 0, hasPhone: false, hasHardware: false };
+        const t = harvestAgg.get(key) || 0;
         let device = u.device || "Unknown";
-        if (a.hasHardware) device = "Raspberry Pi";
-        else if (a.hasPhone) device = "Phone";
-        return { ...u, plantCount: a.count, device };
+        if (p.hasHardware) device = "Raspberry Pi";
+        else if (p.hasPhone) device = "Phone";
+        return { ...u, plantCount: p.count, device, totalHarvest: t };
       });
     },
 
-    /* Details modal */
+    /* ---------- Details modal ---------- */
     openUserDetails(user) {
-      const fresh = this.users.find((x) => x.id === user.id) || user;
+      const fresh = this.users.find((x) => (x.id || x.uid) === (user.id || user.uid)) || user;
       this.detailUser = fresh;
       this.showDetails = true;
       document.documentElement.style.overflow = "hidden";
@@ -574,20 +560,100 @@ export default {
       document.documentElement.style.overflow = "";
     },
 
-    /* Helpers */
+    /* ---------- Utils ---------- */
     formatDate(d) {
       if (!d) return "N/A";
-      const dt = d instanceof Date ? d : new Date(d);
+      const dt = d?.toDate ? d.toDate() : (d instanceof Date ? d : new Date(d));
       return isNaN(dt) ? "N/A" : dt.toLocaleDateString();
     },
     formatDateISO(d) {
       if (!d) return "";
-      const dt = d instanceof Date ? d : new Date(d);
+      const dt = d?.toDate ? d.toDate() : (d instanceof Date ? d : new Date(d));
       return isNaN(dt) ? "" : dt.toISOString().split("T")[0];
     },
 
+    ownerNameByUid(uid) {
+      if (!uid) return "Unknown Owner";
+      const users = this.users || [];
+      const u = users.find((x) => x.id === uid || x.uid === uid);
+      if (u) return u.name || u.displayName || u.email || "Unknown Owner";
+      const short = String(uid).slice(0, 6);
+      return `Unknown Owner (${short}…)`;
+    },
+
+    // Normalize raw harvest docs (keep whatever DB has; UI will ignore quality)
+    normalizeHarvests(raw = []) {
+      const pick = (obj, ...paths) => {
+        for (const p of paths) {
+          try {
+            const val = p.split(".").reduce((o, k) => (o == null ? undefined : o[k]), obj);
+            if (val !== undefined) return val;
+          } catch (_) {}
+        }
+        return undefined;
+      };
+      const asDate = (v) => (v?.toDate ? v.toDate() : v);
+
+      return (raw || []).map((h) => {
+        const data = h?.data ? h.data : h;
+        const snapData = typeof h?.payload?.doc?.data === "function" ? h.payload.doc.data() : null;
+
+        const date = asDate(
+          pick(h, "date", "harvestedAt") ??
+          pick(data, "date", "harvestedAt") ??
+          pick(snapData || {}, "date", "harvestedAt")
+        );
+
+        const ownerUid =
+          pick(h, "user_id", "userId", "owner_uid") ??
+          pick(data, "user_id", "userId", "owner_uid") ??
+          pick(snapData || {}, "user_id", "userId", "owner_uid") ??
+          null;
+
+        const plantName =
+          pick(h, "plantName") ??
+          pick(data, "plantName") ??
+          pick(snapData || {}, "plantName") ?? "Unknown";
+
+        // We keep count/yield/strawberries in memory but will only *display* count via getCount()
+        const count =
+          (typeof pick(h, "count") === "number" ? pick(h, "count") : undefined) ??
+          (typeof pick(data, "count") === "number" ? pick(data, "count") : undefined) ??
+          (typeof pick(snapData || {}, "count") === "number" ? pick(snapData || {}, "count") : undefined) ??
+          // fallback to other fields if no count (so totals/UI can still compute getCount() later)
+          (typeof pick(h, "yield") === "number" ? pick(h, "yield") : undefined) ??
+          (typeof pick(data, "yield") === "number" ? pick(data, "yield") : undefined) ??
+          (typeof pick(snapData || {}, "yield") === "number" ? pick(snapData || {}, "yield") : undefined) ??
+          (typeof pick(h, "strawberries") === "number" ? pick(h, "strawberries") : undefined) ??
+          (typeof pick(data, "strawberries") === "number" ? pick(data, "strawberries") : undefined) ??
+          (typeof pick(snapData || {}, "strawberries") === "number" ? pick(snapData || {}, "strawberries") : undefined) ??
+          0;
+
+        return {
+          ...(snapData || {}),
+          ...(data || {}),
+          ...h,
+          plantName,
+          date,
+          user_id: ownerUid,
+          owner: h.owner || this.ownerNameByUid(ownerUid),
+          count
+          // any 'quality' field from DB remains in memory but is never used/rendered
+        };
+      });
+    },
+
+    updateHarvestOwners() {
+      const resolveOwner = (h) => {
+        const explicit = h.owner && h.owner !== "Unknown" && h.owner !== "Unknown Owner";
+        if (explicit) return h;
+        const uid = h.user_id || h.owner_uid || h.userId || h?.data?.user_id || h?.data?.userId || null;
+        return { ...h, owner: this.ownerNameByUid(uid) };
+      };
+      this.harvests = (this.harvests || []).map(resolveOwner);
+    },
+
     isUserAdminCheck(uid) {
-      // Keep admins visible in the table; return true here if you want to hide them
       return isUserAdmin(uid, this.adminsMap, this.currentUser) && false;
     },
 
@@ -613,120 +679,28 @@ export default {
       alert(message);
     },
 
-    /* UI stubs */
-    viewHarvestDetails(h) {
-      console.log("View harvest:", h);
-    },
-    editHarvest(h) {
-      console.log("Edit harvest:", h);
-    },
+    // stubs
+    viewHarvestDetails(h) { console.log("View harvest:", h); },
+    editHarvest(h) { console.log("Edit harvest:", h); },
   },
 };
 </script>
 
 <style scoped>
-/* Keep your existing AdminPage.css styles loaded; only essentials here */
-
-.badge-admin {
-  margin-left: 8px;
-  padding: 2px 6px;
-  font-size: 12px;
-  border-radius: 6px;
-  background: #e9f5ff;
-  color: #0369a1;
-  border: 1px solid #bae6fd;
-}
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.35);
-  display: grid;
-  place-items: center;
-  z-index: 1000;
-}
-
-.modal-card {
-  width: min(900px, 92vw);
-  max-height: 85vh;
-  background: #fff;
-  border-radius: 14px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.2);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  color: #333;
-}
-
-.modal-header, .modal-footer {
-  padding: 12px 16px;
-  background: #f7f7f7;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: #333;
-}
-
-.modal-body {
-  padding: 16px;
-  overflow: auto;
-  color: #333;
-}
-
-.modal-close {
-  border: none;
-  background: transparent;
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-  color: #333;
-}
-
-.info-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0,1fr));
-  gap: 8px 16px;
-  margin-bottom: 8px;
-  color: #333;
-}
-
-.plants-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
-}
-
-.plant-card {
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 10px;
-  background: #fafafa;
-  color: #333;
-}
-
-.plant-name {
-  font-weight: 600;
-  color: #000;
-  margin-bottom: 4px;
-}
-
-.plant-details { color: #555; }
-
-.muted { color: #000; font-weight: 500; }
-
-.btn {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-  background: #fff;
-  cursor: pointer;
-  color: #333;
-}
-
-.harvests-table th {
-  background: #f8f9fa;
-  color: #333 !important;
-  font-weight: 600;
-}
-.harvests-table td { color: #333 !important; }
+/* Keep relying on your AdminPage.css; only a few local bits here */
+.badge-admin{margin-left:8px;padding:2px 6px;font-size:12px;border-radius:6px;background:#e9f5ff;color:#0369a1;border:1px solid #bae6fd}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);display:grid;place-items:center;z-index:1000}
+.modal-card{width:min(900px,92vw);max-height:85vh;background:#fff;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.2);display:flex;flex-direction:column;overflow:hidden;color:#333}
+.modal-header,.modal-footer{padding:12px 16px;background:#f7f7f7;display:flex;align-items:center;justify-content:space-between;color:#333}
+.modal-body{padding:16px;overflow:auto;color:#333}
+.modal-close{border:none;background:transparent;font-size:20px;line-height:1;cursor:pointer;color:#333}
+.info-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px;margin-bottom:8px;color:#333}
+.plants-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.plant-card{border:1px solid #e5e7eb;border-radius:10px;padding:10px;background:#fafafa;color:#333}
+.plant-name{font-weight:600;color:#000;margin-bottom:4px}
+.plant-details{color:#555}
+.muted{color:#000;font-weight:500}
+.btn{padding:8px 12px;border-radius:8px;border:1px solid #e5e7eb;background:#fff;cursor:pointer;color:#333}
+.harvests-table th{background:#f8f9fa;color:#333!important;font-weight:600}
+.harvests-table td{color:#333!important}
 </style>

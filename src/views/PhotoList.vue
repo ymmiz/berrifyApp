@@ -15,62 +15,36 @@
     </div>
  
     <div class="page-content">
-      <!-- Hidden file input for phone uploads -->
-      <input
-        ref="fileInput"
-        type="file"
-        accept="image/*"
-        capture="environment"
-        style="display:none"
-        @change="handleFile"
-      />
- 
-      <!-- Enhanced Add Photo Button -->
-      <div class="add-photo-section">
-        <button class="add-photo-btn" @click="addMorePhotos" :disabled="loadingUpload">
-          <div class="btn-icon">
-            <i class="bi bi-camera-fill"></i>
-          </div>
-          <span class="btn-text">{{ loadingUpload ? 'Uploading…' : 'Capture New Photo' }}</span>
-          <div class="btn-shine"></div>
-        </button>
-      </div>
- 
-      <!-- Enhanced Photos Timeline -->
-      <div v-if="photosByDay.length" class="photos-timeline">
-        <div v-for="dayGroup in photosByDay" :key="dayGroup.date" class="day-group">
-          <div class="day-header">
-            <div class="date-badge">
-              <div class="date-main">{{ formatDate(dayGroup.date) }}</div>
-              <div class="photo-count">{{ dayGroup.photos.length }} photo{{ dayGroup.photos.length > 1 ? 's' : '' }}</div>
-            </div>
-            <div class="day-divider"></div>
+      <!-- Photos Collection -->
+      <div v-if="photosByDay.length" class="photos-collection">
+        <div v-for="dayGroup in photosByDay" :key="dayGroup.date" class="day-section">
+          <div class="section-header">
+            <h3 class="date-title">{{ formatDate(dayGroup.date) }}</h3>
+            <span class="photo-count">{{ dayGroup.photos.length }} photo{{ dayGroup.photos.length > 1 ? 's' : '' }}</span>
           </div>
  
-          <div class="photos-grid">
-            <div v-for="photo in dayGroup.photos" :key="photo.id" class="photo-card">
-              <div class="photo-thumbnail" @click="viewPhoto(photo)">
-                <img :src="photo.annotated_url || photo.url" :alt="photo.filename" />
-                <div class="photo-overlay">
-                  <div class="overlay-content">
+          <div class="photos-flow">
+            <div v-for="photo in dayGroup.photos" :key="photo.id" class="photo-item">
+              <div class="photo-card" @click="viewPhoto(photo)">
+                <div class="card-image">
+                  <img :src="photo.url" :alt="photo.filename" />
+                  <div class="image-overlay">
                     <i class="bi bi-eye-fill"></i>
-                    <span>View</span>
+                  </div>
+                  <div v-if="photo.hasAnalysis" class="analysis-indicator">
+                    <i class="bi bi-graph-up"></i>
+                    <span>Analyzed</span>
                   </div>
                 </div>
-                <div class="photo-badge" v-if="photo.analysis && photo.analysis.total">
-                  <i class="bi bi-check-circle-fill"></i>
-                  <span>{{ photo.analysis.total }}</span>
+                <div class="card-content">
+                  <div class="photo-title">{{ photo.filename }}</div>
+                  <div class="photo-details">
+                    <span class="upload-time">{{ formatTime(photo.uploadDate) }}</span>
+                    <button class="delete-btn" @click.stop="deletePhoto(photo)" title="Delete photo">
+                      <i class="bi bi-trash3"></i>
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <div class="photo-info">
-                <div class="photo-meta">
-                  <span class="photo-time">{{ formatTime(photo.uploadDate) }}</span>
-                  <span class="photo-source">{{ photo.source }}</span>
-                </div>
-                <span class="photo-name">{{ photo.filename }}</span>
-                <button class="delete-photo-btn" @click.stop="deletePhoto(photo)" title="Delete photo">
-                  <i class="bi bi-trash3-fill"></i>
-                </button>
               </div>
             </div>
           </div>
@@ -81,7 +55,7 @@
       <div v-else class="empty-state">
         <div class="empty-illustration">
           <div class="empty-circle">
-            <i class="bi bi-camera"></i>
+            <i class="bi bi-images"></i>
           </div>
           <div class="empty-sparkles">
             <div class="sparkle sparkle-1">✨</div>
@@ -89,12 +63,8 @@
             <div class="sparkle sparkle-3">✨</div>
           </div>
         </div>
-        <h3>Your photo journey begins here</h3>
-        <p>Capture beautiful moments of your {{ plantName.toLowerCase() }} as it grows</p>
-        <button class="btn-primary" @click="addMorePhotos" :disabled="loadingUpload">
-          <i class="bi bi-camera-fill"></i>
-          {{ loadingUpload ? 'Uploading…' : 'Take First Photo' }}
-        </button>
+        <h3>No photos yet</h3>
+        <p>Photos from your {{ plantName.toLowerCase() }} garden will appear here once they're uploaded</p>
       </div>
     </div>
  
@@ -116,12 +86,14 @@
         <!-- Enhanced Image Display -->
         <div class="image-showcase">
           <div class="image-container">
-            <div class="image-label">Original</div>
+            <div class="image-label" :class="{ 'processed': selectedPhoto.hasAnalysis }">
+              {{ selectedPhoto.hasAnalysis ? 'Ripeness Analysis' : 'Original Photo' }}
+            </div>
             <img :src="selectedPhoto.url" :alt="selectedPhoto.filename" />
           </div>
-          <div v-if="selectedPhoto.annotated_url" class="image-container">
-            <div class="image-label analyzed">Analyzed</div>
-            <img :src="selectedPhoto.annotated_url" :alt="selectedPhoto.filename + ' annotated'" />
+          <div v-if="selectedPhoto.hasAnalysis && selectedPhoto.originalUrl" class="image-container">
+            <div class="image-label">Original</div>
+            <img :src="selectedPhoto.originalUrl" :alt="selectedPhoto.filename + ' original'" />
           </div>
         </div>
  
@@ -134,41 +106,6 @@
             </div>
             <p class="upload-date">{{ formatDateTime(selectedPhoto.uploadDate) }}</p>
           </div>
- 
-          <!-- Enhanced Detection Results -->
-          <div v-if="selectedPhoto.analysis" class="analysis-card">
-            <div class="detail-header">
-              <i class="bi bi-cpu-fill"></i>
-              <span>AI Analysis Results</span>
-            </div>
-            <div class="analysis-stats">
-              <div class="stat-item total">
-                <div class="stat-number">{{ selectedPhoto.analysis.total || 0 }}</div>
-                <div class="stat-label">Total Detected</div>
-              </div>
-              <div class="stats-breakdown">
-                <div class="stat-item ripe">
-                  <span class="stat-icon">🍓</span>
-                  <span class="stat-value">{{ selectedPhoto.analysis.ripe || 0 }} Ripe</span>
-                </div>
-                <div class="stat-item unripe">
-                  <span class="stat-icon">🟢</span>
-                  <span class="stat-value">{{ selectedPhoto.analysis.unripe || 0 }} Unripe</span>
-                </div>
-                <div class="stat-item overripe">
-                  <span class="stat-icon">⚠️</span>
-                  <span class="stat-value">{{ selectedPhoto.analysis.overripe || 0 }} Overripe</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-else class="analysis-card empty">
-            <div class="detail-header">
-              <i class="bi bi-hourglass-split"></i>
-              <span>Analysis Pending</span>
-            </div>
-            <p>AI analysis is processing or not available for this photo.</p>
-          </div>
         </div>
       </div>
     </div>
@@ -178,13 +115,11 @@
 <script>
 import {
   getFirestore, collection, query, orderBy, getDocs,
-  doc, deleteDoc, setDoc, serverTimestamp
+  doc, deleteDoc
 } from 'firebase/firestore'
 import {
-  getStorage, ref as storageRef, deleteObject,
-  uploadBytes, getDownloadURL
+  getStorage, ref as storageRef, deleteObject
 } from 'firebase/storage'
-import { getAuth } from 'firebase/auth'
  
 export default {
   name: 'PhotoList',
@@ -195,8 +130,7 @@ export default {
       mode: 'phone',       // default (phone or hardware)
       photos: [],
       selectedPhoto: null,
-      loading: true,
-      loadingUpload: false
+      loading: true
     }
   },
   computed: {
@@ -236,13 +170,13 @@ export default {
           const data = docSnap.data()
           return {
             id: docSnap.id,
-            url: data.image_url,
-            annotated_url: data.annotated_image || null, // 👈 new
+            url: data.annotated_image || data.image_url, // Use processed image with ripeness results if available
+            originalUrl: data.image_url, // Keep original for reference
             filename: this.extractFilename(data.storage_path) || `photo_${docSnap.id}.jpg`,
             uploadDate: data.timestamp?.toDate() || new Date(),
             source: data.source || 'unknown',
             storage_path: data.storage_path,
-            analysis: data.analysis || null // 👈 analysis with ripe/unripe/overripe counts
+            hasAnalysis: !!data.annotated_image // Track if this photo has been processed
           }
         })
       } catch (err) {
@@ -273,61 +207,12 @@ export default {
         console.error('Error deleting photo:', err)
       }
     },
- 
-    async handleFile(event) {
-      const file = event.target.files?.[0]
-      if (!file) return
-      try {
-        this.loadingUpload = true
-        const storage = getStorage()
-        const db = getFirestore()
-        const auth = getAuth()
-        const uid = auth.currentUser?.uid
-        if (!uid) return alert('Please log in first.')
-        const ts = Date.now()
-        const safeName = file.name?.replace(/[^\w.\-]/g, '_') || 'photo.jpg'
-        const path = `plants/${this.plantId}/${uid}/${ts}_${safeName}`
-        const fileRef = storageRef(storage, path)
-        await uploadBytes(fileRef, file)
-        const url = await getDownloadURL(fileRef)
-        const uploadId = `${uid}_${ts}`
-        await setDoc(doc(db, 'plants', this.plantId, 'uploads', uploadId), {
-          id: uploadId,
-          plantId: this.plantId,
-          user_id: uid,
-          image_url: url,
-          storage_path: path,
-          timestamp: serverTimestamp(),
-          source: 'phone',
-          detected_count: 0,
-          analysis: null
-        })
-        await this.refreshPhotos()
-      } catch (err) {
-        console.error('Upload failed:', err)
-        alert('Failed to upload photo.')
-      } finally {
-        this.loadingUpload = false
-        if (event?.target) event.target.value = ''
-      }
-    },
- 
+
     async refreshPhotos() {
       this.loading = true
       await this.loadPhotos()
     },
- 
-    addMorePhotos() {
-      if (this.mode === 'hardware') {
-        this.$router.push({
-          path: '/hardware',
-          query: { plantId: this.plantId, plantName: this.plantName }
-        })
-      } else {
-        this.$refs.fileInput.click()
-      }
-    },
- 
+
     formatDate(d) {
       const date = new Date(d)
       const today = new Date()
@@ -365,7 +250,7 @@ export default {
   position: relative;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
- 
+
 /* Enhanced Header */
 .header {
   display: flex;
@@ -398,6 +283,11 @@ export default {
   background: rgba(255,255,255,0.1);
 }
 
+.back-button i {
+  font-size: 24px;
+  color: white;
+}
+
 .back-button:hover {
   background: rgba(255,255,255,0.2);
   transform: translateX(-2px);
@@ -408,110 +298,42 @@ export default {
 }
 
 .header-content h1 {
-  font-size: 24px;
-  margin: 0 0 4px 0;
-  font-weight: 700;
-  text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  font-size: 32px;
+  margin: 0 0 8px 0;
+  font-weight: 900;
+  color: white;
 }
 
 .header-subtitle {
-  font-size: 14px;
+  font-size: 17px;
   opacity: 0.9;
-  font-weight: 400;
+  font-weight: 600;
 }
 
 .header-decoration {
-  font-size: 24px;
-  opacity: 0.6;
-  animation: float 3s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0px) rotate(0deg); }
-  50% { transform: translateY(-4px) rotate(5deg); }
+  font-size: 28px;
+  opacity: 0.7;
 }
  
-/* Enhanced Add Photo Button */
-.add-photo-section {
-  padding: 24px 16px;
-  display: flex;
-  justify-content: center;
-}
-
-.add-photo-btn, .btn-primary {
-  background: linear-gradient(135deg, #16a085 0%, #2ecc71 100%);
-  color: white;
-  padding: 16px 24px;
-  font-size: 16px;
-  font-weight: 600;
-  border-radius: 16px;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 8px 24px rgba(22, 160, 133, 0.3);
-}
-
-.add-photo-btn:hover, .btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 32px rgba(22, 160, 133, 0.4);
-}
-
-.add-photo-btn:active, .btn-primary:active {
-  transform: translateY(0);
-}
-
-.btn-icon {
-  font-size: 18px;
-}
-
-.btn-shine {
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-  transition: left 0.5s ease;
-}
-
-.add-photo-btn:hover .btn-shine {
-  left: 100%;
-}
- 
-/* Enhanced Timeline */
-.photos-timeline {
+/* Photos Collection */
+.photos-collection {
   padding: 0 16px;
 }
 
-.day-group {
+.day-section {
   margin-bottom: 32px;
-  background: white;
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.08);
-  border: 1px solid rgba(22, 160, 133, 0.1);
 }
 
-.day-header {
-  padding: 20px;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border-bottom: 1px solid rgba(22, 160, 133, 0.1);
-  position: relative;
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 0 8px;
 }
 
-.date-badge {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.date-main {
-  font-size: 18px;
+.date-title {
+  font-size: 24px;
   font-weight: 700;
   color: #16a085;
   margin: 0;
@@ -520,43 +342,193 @@ export default {
 .photo-count {
   font-size: 14px;
   color: #64748b;
+  background: rgba(22, 160, 133, 0.1);
+  padding: 4px 12px;
+  border-radius: 20px;
   font-weight: 500;
 }
 
-.day-divider {
+.photos-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.photo-item {
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+  border: 1px solid rgba(22, 160, 133, 0.1);
+  transition: all 0.3s ease;
+}
+
+.photo-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.12);
+}
+
+.photo-card {
+  display: flex;
+  cursor: pointer;
+}
+
+.card-image {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.photo-card:hover .card-image img {
+  transform: scale(1.05);
+}
+
+.image-overlay {
   position: absolute;
-  right: 20px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 60px;
-  height: 3px;
-  background: linear-gradient(90deg, #16a085, #2ecc71);
-  border-radius: 2px;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(22, 160, 133, 0.8), rgba(46, 204, 113, 0.8));
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.3s ease;
+  font-size: 24px;
+}
+
+.photo-card:hover .image-overlay {
+  opacity: 1;
+}
+
+.analysis-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: linear-gradient(135deg, #16a085, #2ecc71);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.2);
+}
+
+.analysis-indicator i {
+  font-size: 12px;
+}
+
+.card-content {
+  flex: 1;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.photo-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 8px;
+  word-break: break-word;
+}
+
+.photo-details {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.upload-time {
+  font-size: 14px;
+  color: #64748b;
+  background: rgba(100, 116, 139, 0.1);
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+
+.delete-btn {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  font-size: 16px;
+}
+
+.delete-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+  transform: scale(1.1);
 }
  
 /* Enhanced Photos Grid */
 .photos-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 16px;
-  padding: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 20px;
+  padding: 28px;
 }
 
 .photo-card {
   display: flex;
   flex-direction: column;
-  background: white;
-  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
   overflow: hidden;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
-  transition: all 0.3s ease;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1), 0 1px 0 rgba(255,255,255,0.5) inset;
+  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   border: 2px solid transparent;
+  position: relative;
+  animation: cardFloat 0.6s ease-out;
+}
+
+@keyframes cardFloat {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.photo-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(22, 160, 133, 0.1), rgba(46, 204, 113, 0.1));
+  opacity: 0;
+  transition: all 0.4s ease;
+  z-index: -1;
 }
 
 .photo-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 32px rgba(0,0,0,0.15);
-  border-color: rgba(22, 160, 133, 0.3);
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2), 0 1px 0 rgba(255,255,255,0.6) inset;
+  border-color: rgba(22, 160, 133, 0.4);
+}
+
+.photo-card:hover::before {
+  opacity: 1;
 }
 
 .photo-thumbnail {
@@ -567,26 +539,29 @@ export default {
 
 .photo-thumbnail img {
   width: 100%;
-  height: 180px;
+  height: 200px;
   object-fit: cover;
   display: block;
-  transition: transform 0.3s ease;
+  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  filter: contrast(1.1) saturate(1.1);
 }
 
 .photo-card:hover .photo-thumbnail img {
-  transform: scale(1.05);
+  transform: scale(1.08) rotate(0.5deg);
+  filter: contrast(1.2) saturate(1.2) brightness(1.05);
 }
 
 .photo-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(22, 160, 133, 0.9), rgba(46, 204, 113, 0.9));
+  background: linear-gradient(135deg, rgba(22, 160, 133, 0.95), rgba(46, 204, 113, 0.9));
   color: white;
   display: flex;
   justify-content: center;
   align-items: center;
   opacity: 0;
-  transition: all 0.3s ease;
+  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  backdrop-filter: blur(5px);
 }
 
 .photo-thumbnail:hover .photo-overlay {
@@ -597,35 +572,61 @@ export default {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  font-weight: 600;
+  gap: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  animation: overlayBounce 0.6s ease;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+@keyframes overlayBounce {
+  0% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .overlay-content i {
-  font-size: 24px;
+  font-size: 28px;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+  animation: iconRotate 2s ease-in-out infinite;
+}
+
+@keyframes iconRotate {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(5deg) scale(1.1); }
 }
 
 .photo-badge {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 16px;
+  right: 16px;
   background: linear-gradient(135deg, #16a085, #2ecc71);
   color: white;
-  padding: 6px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 700;
   display: flex;
   align-items: center;
-  gap: 4px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  gap: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.2);
+  backdrop-filter: blur(10px);
+  animation: badgeFloat 3s ease-in-out infinite;
+}
+
+@keyframes badgeFloat {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(-2px) scale(1.05); }
 }
 
 .photo-info {
-  padding: 16px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.95) 100%);
 }
 
 .photo-meta {
@@ -678,28 +679,79 @@ export default {
 /* Enhanced Empty State */
 .empty-state {
   text-align: center;
-  padding: 60px 16px;
+  padding: 80px 20px;
   color: #64748b;
+  position: relative;
+}
+
+.empty-state::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(22, 160, 133, 0.05) 0%, transparent 70%);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: breathe 6s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.3; }
+  50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.6; }
 }
 
 .empty-illustration {
   position: relative;
-  margin-bottom: 32px;
+  margin-bottom: 40px;
   display: inline-block;
+  z-index: 2;
 }
 
 .empty-circle {
-  width: 120px;
-  height: 120px;
+  width: 140px;
+  height: 140px;
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   border-radius: 50%;
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 48px;
+  font-size: 56px;
   color: #16a085;
-  box-shadow: 0 8px 32px rgba(22, 160, 133, 0.1);
-  border: 3px solid rgba(22, 160, 133, 0.1);
+  box-shadow: 0 15px 50px rgba(22, 160, 133, 0.15), 0 1px 0 rgba(255,255,255,0.5) inset;
+  border: 4px solid rgba(22, 160, 133, 0.1);
+  position: relative;
+  overflow: hidden;
+  animation: circleFloat 4s ease-in-out infinite;
+}
+
+@keyframes circleFloat {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  25% { transform: translateY(-10px) rotate(3deg); }
+  50% { transform: translateY(-5px) rotate(-2deg); }
+  75% { transform: translateY(-8px) rotate(2deg); }
+}
+
+.empty-circle::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(from 0deg, transparent, rgba(22, 160, 133, 0.1), transparent);
+  animation: rotate 8s linear infinite;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.empty-circle i {
+  z-index: 2;
+  filter: drop-shadow(0 4px 12px rgba(22, 160, 133, 0.2));
 }
 
 .empty-sparkles {
@@ -709,117 +761,171 @@ export default {
 
 .sparkle {
   position: absolute;
-  font-size: 16px;
-  animation: sparkle 2s ease-in-out infinite;
+  font-size: 20px;
+  animation: sparkle 3s ease-in-out infinite;
+  filter: drop-shadow(0 2px 4px rgba(22, 160, 133, 0.3));
 }
 
 .sparkle-1 {
-  top: 10%;
+  top: 15%;
   right: 20%;
   animation-delay: 0s;
+  color: #16a085;
 }
 
 .sparkle-2 {
-  bottom: 20%;
-  left: 10%;
-  animation-delay: 0.7s;
+  bottom: 25%;
+  left: 15%;
+  animation-delay: 1s;
+  color: #2ecc71;
 }
 
 .sparkle-3 {
-  top: 30%;
-  left: -10%;
-  animation-delay: 1.4s;
+  top: 40%;
+  left: -5%;
+  animation-delay: 2s;
+  color: #27ae60;
 }
 
 @keyframes sparkle {
   0%, 100% { transform: scale(0) rotate(0deg); opacity: 0; }
-  50% { transform: scale(1) rotate(180deg); opacity: 1; }
+  25% { transform: scale(0.5) rotate(90deg); opacity: 0.5; }
+  50% { transform: scale(1.2) rotate(180deg); opacity: 1; }
+  75% { transform: scale(0.8) rotate(270deg); opacity: 0.7; }
 }
 
 .empty-state h3 {
-  font-size: 24px;
+  font-size: 28px;
   color: #1e293b;
-  margin-bottom: 12px;
-  font-weight: 700;
+  margin-bottom: 16px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #16a085, #2ecc71);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
 }
 
 .empty-state p {
-  font-size: 16px;
-  margin-bottom: 32px;
+  font-size: 18px;
+  margin-bottom: 40px;
   color: #64748b;
-  max-width: 300px;
+  max-width: 400px;
   margin-left: auto;
   margin-right: auto;
+  line-height: 1.6;
 }
  
 /* Enhanced Modal */
 .photo-modal {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.8);
+  background: rgba(0,0,0,0.85);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 2000;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(15px);
+  animation: modalFadeIn 0.4s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; backdrop-filter: blur(0px); }
+  to { opacity: 1; backdrop-filter: blur(15px); }
 }
 
 .modal-content {
-  background: white;
-  border-radius: 24px;
-  max-width: 90%;
-  max-height: 90%;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 28px;
+  max-width: 95%;
+  max-height: 95%;
   overflow-y: auto;
   position: relative;
-  box-shadow: 0 24px 64px rgba(0,0,0,0.3);
-  border: 1px solid rgba(255,255,255,0.2);
+  box-shadow: 0 30px 80px rgba(0,0,0,0.3), 0 1px 0 rgba(255,255,255,0.5) inset;
+  border: 1px solid rgba(255,255,255,0.3);
+  animation: modalSlideIn 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+@keyframes modalSlideIn {
+  from { transform: scale(0.8) translateY(50px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
 }
 
 .modal-header {
-  padding: 24px 24px 0;
+  padding: 28px 28px 0;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  background: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(248,250,252,0.8) 100%);
+  border-bottom: 1px solid rgba(22, 160, 133, 0.1);
 }
 
 .modal-header h3 {
   margin: 0;
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 24px;
+  font-weight: 800;
   color: #1e293b;
   flex: 1;
-  margin-right: 16px;
+  margin-right: 20px;
+  background: linear-gradient(135deg, #16a085, #2ecc71);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .modal-actions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
 }
 
 .close-btn, .modal-delete-btn {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: rgba(248,250,252,0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(226,232,240,0.5);
   cursor: pointer;
-  font-size: 16px;
-  padding: 12px;
-  border-radius: 12px;
+  font-size: 18px;
+  padding: 14px;
+  border-radius: 14px;
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  position: relative;
+  overflow: hidden;
+}
+
+.close-btn::before, .modal-delete-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(22, 160, 133, 0.1);
+  border-radius: 50%;
   transition: all 0.3s ease;
+  transform: translate(-50%, -50%);
+}
+
+.close-btn:hover::before, .modal-delete-btn:hover::before {
+  width: 100px;
+  height: 100px;
 }
 
 .close-btn:hover {
-  background: #f1f5f9;
+  background: rgba(241,245,249,0.9);
   color: #1e293b;
+  transform: scale(1.05);
 }
 
 .modal-delete-btn {
   color: #ef4444;
-  border-color: #fecaca;
+  border-color: rgba(254,202,202,0.5);
 }
 
 .modal-delete-btn:hover {
-  background: #fef2f2;
+  background: rgba(254,242,242,0.9);
   color: #dc2626;
-  border-color: #fca5a5;
+  border-color: rgba(252,165,165,0.5);
+  transform: scale(1.05);
 }
 
 .image-showcase {
@@ -846,30 +952,39 @@ export default {
   border-radius: 8px;
 }
 
-.image-label.analyzed {
+.image-label.processed {
   background: linear-gradient(135deg, #16a085, #2ecc71);
   color: white;
+  box-shadow: 0 4px 12px rgba(22, 160, 133, 0.3);
 }
 
 .image-showcase img {
-  max-width: 320px;
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-  border: 2px solid rgba(22, 160, 133, 0.1);
+  max-width: 350px;
+  border-radius: 20px;
+  box-shadow: 0 15px 50px rgba(0,0,0,0.2), 0 1px 0 rgba(255,255,255,0.5) inset;
+  border: 3px solid rgba(22, 160, 133, 0.15);
+  transition: all 0.3s ease;
+}
+
+.image-showcase img:hover {
+  transform: scale(1.02);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25), 0 1px 0 rgba(255,255,255,0.6) inset;
 }
 
 .photo-details {
-  padding: 0 24px 24px;
+  padding: 0 28px 28px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
 }
 
-.detail-card, .analysis-card {
-  background: #f8fafc;
-  border-radius: 16px;
-  padding: 20px;
-  border: 1px solid #e2e8f0;
+.detail-card {
+  background: rgba(248,250,252,0.8);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  padding: 24px;
+  border: 1px solid rgba(226,232,240,0.5);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.05), 0 1px 0 rgba(255,255,255,0.5) inset;
 }
 
 .detail-header {
@@ -891,108 +1006,52 @@ export default {
   font-size: 14px;
 }
 
-.analysis-stats {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.stat-item.total {
-  text-align: center;
-  padding: 20px;
-  background: linear-gradient(135deg, #16a085, #2ecc71);
-  color: white;
-  border-radius: 12px;
-}
-
-.stat-number {
-  font-size: 36px;
-  font-weight: 800;
-  margin-bottom: 4px;
-}
-
-.stat-label {
-  font-size: 14px;
-  opacity: 0.9;
-}
-
-.stats-breakdown {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 12px;
-}
-
-.stats-breakdown .stat-item {
-  background: white;
-  padding: 16px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 2px solid #f1f5f9;
-  transition: all 0.3s ease;
-}
-
-.stats-breakdown .stat-item:hover {
-  border-color: #16a085;
-  transform: translateY(-2px);
-}
-
-.stats-breakdown .stat-item.ripe:hover {
-  border-color: #ef4444;
-  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.2);
-}
-
-.stats-breakdown .stat-item.unripe:hover {
-  border-color: #22c55e;
-  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.2);
-}
-
-.stats-breakdown .stat-item.overripe:hover {
-  border-color: #f59e0b;
-  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.2);
-}
-
-.stat-icon {
-  font-size: 20px;
-}
-
-.stat-value {
-  font-weight: 600;
-  color: #1e293b;
-  font-size: 14px;
-}
-
-.analysis-card.empty {
-  background: #fafafa;
-  border: 2px dashed #d1d5db;
-  text-align: center;
-}
-
-.analysis-card.empty p {
-  margin: 0;
-  color: #6b7280;
-  font-style: italic;
-}
-
 /* Responsive Design */
 @media (max-width: 768px) {
   .header {
     padding: 16px;
   }
   
-  .header-content h1 {
+  .back-button {
+    padding: 6px;
+  }
+  
+  .back-button i {
     font-size: 20px;
   }
   
-  .photos-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 12px;
+  .header-content h1 {
+    font-size: 24px;
+  }
+  
+  .header-subtitle {
+    font-size: 15px;
+  }
+  
+  .photos-collection {
+    padding: 0 12px;
+  }
+  
+  .card-image {
+    width: 100px;
+    height: 100px;
+  }
+  
+  .card-content {
     padding: 16px;
   }
   
-  .photo-thumbnail img {
-    height: 150px;
+  .photo-title {
+    font-size: 15px;
+    margin-bottom: 6px;
+  }
+  
+  .upload-time {
+    font-size: 13px;
+  }
+  
+  .date-title {
+    font-size: 20px;
   }
   
   .image-showcase {
@@ -1004,57 +1063,47 @@ export default {
     max-width: 100%;
   }
   
-  .stats-breakdown {
-    grid-template-columns: 1fr;
-  }
-  
   .modal-content {
     max-width: 95%;
     margin: 20px;
   }
 }
 
-/* Loading States */
-.add-photo-btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.add-photo-btn:disabled:hover {
-  transform: none;
-  box-shadow: 0 8px 24px rgba(22, 160, 133, 0.3);
-}
-
 /* Smooth Animations */
 .photo-card {
-  animation: fadeInUp 0.5s ease-out;
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.photo-card:nth-child(odd) {
+  animation-delay: 0.1s;
+}
+
+.photo-card:nth-child(even) {
+  animation-delay: 0.2s;
 }
 
 .day-group {
-  animation: fadeInUp 0.6s ease-out;
+  animation: fadeInUp 0.8s ease-out;
 }
 
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(30px) scale(0.95);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
 /* Enhanced Focus States for Accessibility */
 .back-button:focus,
-.add-photo-btn:focus,
-.btn-primary:focus,
 .delete-photo-btn:focus,
 .close-btn:focus,
 .modal-delete-btn:focus {
-  outline: 2px solid #16a085;
-  outline-offset: 2px;
+  outline: 3px solid rgba(22, 160, 133, 0.5);
+  outline-offset: 3px;
 }
 
 /* Subtle Micro-Interactions */
@@ -1062,40 +1111,57 @@ export default {
   transform-origin: center bottom;
 }
 
-.stat-item {
-  transform-origin: center;
-}
-
-.btn-text {
+/* Advanced Hover Effects */
+.photo-meta span {
   transition: all 0.3s ease;
 }
 
-.add-photo-btn:hover .btn-text {
-  letter-spacing: 0.5px;
+.photo-meta span:hover {
+  transform: scale(1.05);
 }
 
-/* Custom Scrollbar */
-.modal-content::-webkit-scrollbar {
-  width: 8px;
+.delete-photo-btn {
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  align-self: flex-end;
+  padding: 10px;
+  border-radius: 12px;
+  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  position: relative;
+  overflow: hidden;
 }
 
-.modal-content::-webkit-scrollbar-track {
-  background: #f1f5f9;
-  border-radius: 4px;
+.delete-photo-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 50%;
+  transition: all 0.3s ease;
+  transform: translate(-50%, -50%);
 }
 
-.modal-content::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, #16a085, #2ecc71);
-  border-radius: 4px;
+.delete-photo-btn:hover::before {
+  width: 100px;
+  height: 100px;
 }
 
-.modal-content::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #138d75, #27ae60);
+.delete-photo-btn:hover {
+  background: rgba(254,242,242,0.8);
+  color: #dc2626;
+  transform: scale(1.15) rotate(5deg);
+  box-shadow: 0 8px 25px rgba(239, 68, 68, 0.3);
 }
 
-/* Enhanced Visual Hierarchy */
+/* Page Content Enhancement */
 .page-content {
   position: relative;
+  z-index: 2;
 }
 
 .page-content::before {
@@ -1104,8 +1170,41 @@ export default {
   top: 0;
   left: 0;
   right: 0;
-  height: 100px;
-  background: linear-gradient(180deg, rgba(240, 249, 255, 0.8) 0%, transparent 100%);
+  height: 150px;
+  background: linear-gradient(180deg, 
+    rgba(240, 249, 255, 0.9) 0%,
+    rgba(224, 242, 254, 0.6) 30%,
+    rgba(240, 253, 244, 0.4) 60%,
+    transparent 100%
+  );
   pointer-events: none;
+  animation: contentGlow 8s ease-in-out infinite;
+}
+
+@keyframes contentGlow {
+  0%, 100% { opacity: 0.7; transform: translateY(0px); }
+  50% { opacity: 1; transform: translateY(-5px); }
+}
+
+/* Custom Scrollbar */
+.modal-content::-webkit-scrollbar {
+  width: 10px;
+}
+
+.modal-content::-webkit-scrollbar-track {
+  background: rgba(241,245,249,0.5);
+  border-radius: 6px;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #16a085, #2ecc71);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.modal-content::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #138d75, #27ae60);
+  background-clip: content-box;
 }
 </style>
