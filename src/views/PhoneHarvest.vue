@@ -1,62 +1,125 @@
 <template>
   <div class="page-container">
-    <div class="back-button" @click="goBack"> &larr; </div>
+    <!-- Back Button -->
+    <div class="back-button" @click="goBack">
+      &larr;
+    </div>
 
+    <!-- Page Header -->
     <div class="page-header">
       <h1 class="page-title">Harvest {{ plantName }}</h1>
       <p class="page-subtitle">Record your strawberry harvest</p>
     </div>
 
+    <!-- Page Content -->
     <div class="page-content">
-      <div class="harvest-card">
-        <h2>How many strawberries did you harvest?</h2>
-        <p class="harvest-description">
-          Enter the number of strawberries you collected from {{ plantName }}
-        </p>
+      <!-- 👇 NEW: loading gate (shows while we fetch latest analysis) -->
+      <div v-if="loadingAnalysis" class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading detection…</p>
+      </div>
 
-        <div class="number-input-section">
-          <div class="number-input-container">
-            <button class="decrease-btn" @click="decreaseCount" :disabled="harvestCount <= 0">−</button>
-            <input type="number" v-model.number="harvestCount" min="0" max="100"
-                   class="harvest-input" @input="validateInput"/>
-            <button class="increase-btn" @click="increaseCount">+</button>
+      <!-- ✅ Show ONLY your first design once data is ready and count > 0 -->
+      <div v-else-if="totalDetectedStrawberries > 0" class="harvest-card">
+        <!-- Detection Results -->
+        <div class="detection-results">
+          <div class="detection-icon">
+            <i class="bi bi-camera-fill"></i>
           </div>
-          <div class="input-label"><span>Strawberries</span></div>
+          <h3>{{ totalDetectedStrawberries }} strawberries detected</h3>
+          <p class="detection-subtitle">Found in your latest photo analysis</p>
         </div>
 
+        <h2>How many strawberries did you harvest?</h2>
+        <p class="harvest-description">
+          Choose how many strawberries you want to harvest from the {{ totalDetectedStrawberries }} detected in {{ plantName }}
+        </p>
+
+        <!-- Number Input -->
+        <div class="number-input-section">
+          <div class="number-input-container">
+            <button
+              class="decrease-btn"
+              @click="decreaseCount"
+              :disabled="harvestCount <= 0"
+            >
+              −
+            </button>
+
+            <input
+              type="number"
+              v-model.number="harvestCount"
+              min="0"
+              max="100"
+              class="harvest-input"
+              @input="validateInput"
+            />
+
+            <button class="increase-btn" @click="increaseCount"> + </button>
+          </div>
+
+          <div class="input-label">
+            <span>Strawberries</span>
+          </div>
+        </div>
+
+        <!-- Quick Select Buttons -->
         <div class="quick-select">
           <h3>Quick Select</h3>
           <div class="quick-buttons">
-            <button v-for="n in quickCounts" :key="n"
-                    class="quick-btn" :class="{ active: harvestCount === n }"
-                    @click="setCount(n)">
-              {{ n }}
+            <button
+              v-for="count in availableQuickCounts"
+              :key="count"
+              class="quick-btn"
+              :class="{ active: harvestCount === count }"
+              @click="setCount(count)"
+            >
+              {{ count }}
+            </button>
+            <button
+              v-if="totalDetectedStrawberries > 0 && !availableQuickCounts.includes(totalDetectedStrawberries)"
+              class="quick-btn all-btn"
+              :class="{ active: harvestCount === totalDetectedStrawberries }"
+              @click="setCount(totalDetectedStrawberries)"
+            >
+              All {{ totalDetectedStrawberries }}
             </button>
           </div>
         </div>
 
-        <div v-if="previousHarvests.length" class="history-preview">
-          <h3>Previous Harvests</h3>
-          <div class="history-items">
-            <div v-for="(h, i) in previousHarvests.slice(0,3)" :key="i" class="history-item">
-              <span class="history-count">{{ h.count }} strawberries</span>
-              <span class="history-date">{{ formatDate(h.date) }}</span>
-            </div>
-          </div>
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+          <button class="btn-secondary" @click="goBack"> Cancel </button>
+          <button
+            class="btn-primary"
+            @click="saveHarvest"
+            :disabled="harvestCount < 0 || harvestCount > totalDetectedStrawberries"
+          >
+            <span v-if="harvestCount > totalDetectedStrawberries">Cannot exceed detected amount</span>
+            <span v-else>Save Harvest</span>
+          </button>
         </div>
       </div>
 
-      <div class="action-buttons">
-        <button class="btn-secondary" @click="goBack">Cancel</button>
-        <button class="btn-primary" @click="saveHarvest" :disabled="harvestCount < 0">Save Harvest</button>
+      <!-- 👇 Optional: gentle empty state when there were no detections -->
+      <div v-else class="empty-state">
+        <h3>No strawberries detected yet</h3>
+        <p>Upload or analyze a photo first, then record your harvest.</p>
+        <div class="action-buttons">
+          <button class="btn-secondary" @click="goBack">Back</button>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import { db, auth } from "@/firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from '@/firebase'
+import {
+  collection, query, orderBy, limit, getDocs,
+  addDoc, serverTimestamp
+} from 'firebase/firestore'
+import { getAuth } from 'firebase/auth'
 
 export default {
   name: "PhoneHarvest",
@@ -66,80 +129,142 @@ export default {
       plantId: null,
       harvestCount: 0,
       quickCounts: [5, 10, 15, 20, 25],
-      previousHarvests: []
+      totalDetectedStrawberries: 0,
+      previousHarvests: [],
+      uploading: false,
+      // 👇 NEW: loading flag for the analysis fetch
+      loadingAnalysis: true,
     };
   },
   mounted() {
     this.loadPlantDetails();
+    this.loadLatestAnalysis();
     this.loadHarvestHistory();
+  },
+  computed: {
+    availableQuickCounts() {
+      if (this.totalDetectedStrawberries === 0) return this.quickCounts;
+      return this.quickCounts.filter(c => c <= this.totalDetectedStrawberries);
+    }
   },
   methods: {
     loadPlantDetails() {
       if (this.$route.query.plantName) this.plantName = this.$route.query.plantName;
-      if (this.$route.query.plantId) this.plantId = this.$route.query.plantId;
+      if (this.$route.query.plantId)  this.plantId  = this.$route.query.plantId;
     },
+
+    async loadLatestAnalysis() {
+      if (!this.plantId) { this.loadingAnalysis = false; return; }
+      try {
+        this.loadingAnalysis = true; // NEW
+        const uploadsRef = collection(db, "plants", this.plantId, "uploads");
+        const q = query(uploadsRef, orderBy("timestamp", "desc"), limit(1));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const latestUpload = snap.docs[0].data();
+          if (latestUpload.analysis?.ripeness_data) {
+            this.totalDetectedStrawberries = Object.keys(latestUpload.analysis.ripeness_data).length;
+          } else {
+            this.totalDetectedStrawberries = 0;
+          }
+        } else {
+          this.totalDetectedStrawberries = 0;
+        }
+      } catch (err) {
+        console.error("Error loading analysis:", err);
+        this.totalDetectedStrawberries = 0;
+      } finally {
+        this.loadingAnalysis = false; // NEW
+      }
+    },
+
     loadHarvestHistory() {
       const key = this.plantId ? `harvestHistory_${this.plantId}` : "harvestHistory_default";
       const saved = localStorage.getItem(key);
       if (saved) {
-        this.previousHarvests = JSON.parse(saved).sort((a,b)=>new Date(b.date)-new Date(a.date));
+        this.previousHarvests = JSON.parse(saved)
+          .sort((a,b)=> new Date(b.date) - new Date(a.date));
       }
     },
-    increaseCount(){ if (this.harvestCount < 100) this.harvestCount++; },
-    decreaseCount(){ if (this.harvestCount > 0) this.harvestCount--; },
-    setCount(n){ this.harvestCount = n; },
-    validateInput(){
-      if (this.harvestCount < 0) this.harvestCount = 0;
-      if (this.harvestCount > 100) this.harvestCount = 100;
-    },
-    async saveHarvest() {
-      if (this.harvestCount < 0) return;
-      const user = auth.currentUser;
-      if (!user) { console.error("No logged in user"); return; }
 
-      // ✅ COUNT-ONLY payload
-      const harvestData = {
-        count: this.harvestCount,
-        date: serverTimestamp(),
-        plantName: this.plantName,
-        plantId: this.plantId,
-        user_id: user.uid,
-        owner: user.email || "Unknown",
-        quality: "Unknown"
-      };
+    increaseCount(){ if (this.harvestCount < 100) this.harvestCount++; },
+    decreaseCount(){ if (this.harvestCount > 0)  this.harvestCount--; },
+    setCount(n){ this.harvestCount = n; },
+
+    validateInput() {
+      if (this.harvestCount < 0) this.harvestCount = 0;
+      else if (this.harvestCount > this.totalDetectedStrawberries && this.totalDetectedStrawberries > 0) {
+        this.harvestCount = this.totalDetectedStrawberries;
+      } else if (this.harvestCount > 100) this.harvestCount = 100;
+    },
+
+    async saveHarvest() {
+      if (!this.plantId) { console.error("No plantId provided"); return; }
+      if (this.harvestCount < 0) return;
+
+      const auth = getAuth();
+      const user = auth.currentUser;
 
       try {
-        await addDoc(collection(db, "plants", this.plantId, "harvests"), harvestData);
+        this.uploading = true;
 
-        // local preview
-        this.previousHarvests.unshift({ ...harvestData, date: new Date().toISOString() });
-        if (this.previousHarvests.length > 20) this.previousHarvests = this.previousHarvests.slice(0,20);
+        const payload = {
+          count: this.harvestCount,
+          date: serverTimestamp(),
+          plantName: this.plantName,
+          plantId: this.plantId,
+          ...(user ? { user_id: user.uid, owner: user.email || null } : {}),
+        };
+
+        await addDoc(collection(db, "plants", this.plantId, "harvests"), payload);
+
+        const localItem = {
+          ...payload,
+          date: new Date().toISOString()
+        };
+        this.previousHarvests.unshift(localItem);
+        if (this.previousHarvests.length > 20) {
+          this.previousHarvests = this.previousHarvests.slice(0, 20);
+        }
         const key = this.plantId ? `harvestHistory_${this.plantId}` : "harvestHistory_default";
         localStorage.setItem(key, JSON.stringify(this.previousHarvests));
 
-        // Emit event to refresh profile stats if user is on profile page
-        this.$root.$emit('harvest-saved');
+        this.updateTotalHarvest();
 
-        this.$router.push({ path: "/analysis", query: {
-          plantId: this.plantId, plantName: this.plantName, harvestCount: this.harvestCount
-        }});
+        this.$router.push({
+          path: "/analysis",
+          query: {
+            plantId: this.plantId,
+            plantName: this.plantName,
+            harvestCount: this.harvestCount,
+          },
+        });
       } catch (err) {
         console.error("Failed to save harvest:", err);
+      } finally {
+        this.uploading = false;
       }
     },
-    formatDate(d){
-      const dt = new Date(d);
-      const diff = (Date.now() - dt.getTime())/(1000*60*60*24);
-      if (diff < 1) return "Today";
-      if (diff < 2) return "Yesterday";
-      if (diff < 7) return `${Math.floor(diff)} days ago`;
-      return dt.toLocaleDateString();
+
+    updateTotalHarvest() {
+      const total = this.previousHarvests.reduce((sum, h) => sum + (h.count || 0), 0);
+      const key = this.plantId ? `totalHarvest_${this.plantId}` : "totalHarvest_default";
+      localStorage.setItem(key, total.toString());
     },
-    goBack(){ this.$router.push("/mydiary"); }
-  }
+
+    formatDate(dateString) {
+      const d = new Date(dateString);
+      const diffDays = Math.floor((Date.now() - d.getTime()) / (1000*60*60*24));
+      if (diffDays === 0) return "Today";
+      if (diffDays === 1) return "Yesterday";
+      if (diffDays < 7) return `${diffDays} days ago`;
+      return d.toLocaleDateString();
+    },
+
+    goBack() { this.$router.push("/mydiary"); },
+  },
 };
 </script>
-
 
 <style scoped>
 /* 🔹 Same CSS as your version (kept unchanged for design) */
@@ -213,6 +338,47 @@ export default {
   font-weight: 600;
   color: #2c3e50;
   margin: 0 0 10px 0;
+}
+
+/* Detection Results */
+.detection-results {
+  background: linear-gradient(135deg, #e8f5e8 0%, #d4edd4 100%);
+  border-radius: 20px;
+  padding: 25px;
+  margin-bottom: 30px;
+  border: 2px solid #a8d4a8;
+  text-align: center;
+}
+
+.detection-icon {
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 15px;
+  box-shadow: 0 8px 25px rgba(39, 174, 96, 0.3);
+}
+
+.detection-icon i {
+  font-size: 24px;
+  color: white;
+}
+
+.detection-results h3 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #27ae60;
+  margin: 0 0 8px 0;
+}
+
+.detection-subtitle {
+  font-size: 14px;
+  color: #7f8c8d;
+  margin: 0;
+  font-style: italic;
 }
 .harvest-description {
   font-size: 16px;
@@ -313,34 +479,23 @@ export default {
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(74, 144, 226, 0.3);
 }
-/* History */
-.history-preview {
-  border-top: 1px solid #ecf0f1;
-  padding-top: 20px;
-  margin-top: 20px;
+
+.quick-btn.all-btn {
+  background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+  border-color: #27ae60;
+  color: white;
+  font-weight: 700;
+  min-width: 70px;
 }
-.history-items {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+
+.quick-btn.all-btn:hover {
+  border-color: #27ae60;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(39, 174, 96, 0.3);
 }
-.history-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 15px;
-  background: rgba(74, 144, 226, 0.05);
-  border-radius: 12px;
-  border-left: 3px solid #4a90e2;
-}
-.history-count {
-  font-weight: 600;
-  color: #2c3e50;
-  font-size: 14px;
-}
-.history-date {
-  font-size: 12px;
-  color: #7f8c8d;
+
+.quick-btn.all-btn.active {
+  background: linear-gradient(135deg, #229954 0%, #1e8449 100%);
 }
 /* Buttons */
 .action-buttons {
@@ -385,4 +540,16 @@ export default {
   transform: none;
   box-shadow: none;
 }
+
+/* 👇 NEW: tiny loader & empty state; does not affect your existing styles */
+.loading-state{
+  display:flex;flex-direction:column;align-items:center;gap:12px;
+  padding:48px;color:#64748b
+}
+.spinner{
+  width:36px;height:36px;border:4px solid rgba(22,160,133,.2);
+  border-top-color:#16a085;border-radius:50%;animation:spin .8s linear infinite
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty-state{ text-align:center; padding:32px 0; color:#64748b; }
 </style>

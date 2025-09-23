@@ -1,22 +1,21 @@
 <template>
   <div class="home">
     <div class="page-container">
-      <!-- Carousel -->
-      <carousel
-        :items-to-show="1"
-        :wrap-around="true"
-        :transition="500"
-        :navigation-enabled="true"
-      >
-        <slide v-for="(item, index) in banners" :key="index">
-          <img :src="item.image" :alt="item.label" class="carousel-img" />
-        </slide>
-      </carousel>
+      <!-- Banner -->
+      <div class="banner-container">
+        <img src="/banner.png" alt="Banner" class="banner-img" />
+      </div>
 
       <!-- Scrollable Cards -->
       <h1>Tips</h1>
       <div class="scroll-container">
-        <div class="scroll-card" v-for="item in cards" :key="item.label">
+        <div
+          class="scroll-card"
+          v-for="item in cards"
+          :key="item.label"
+          @click="handleTipCardClick(item)"
+          :class="{ 'clickable': item.action }"
+        >
           <img :src="item.image" :alt="item.label" />
           <p>{{ item.label }}</p>
         </div>
@@ -25,8 +24,19 @@
       <!-- My Strawberry (dynamic) -->
       <h1>My Strawberry</h1>
 
-      <div v-if="plantsLoading" class="strawberry-container">
-        <p>Loading plants…</p>
+      <div v-if="plantsLoading" class="strawberry-container loading-container">
+        <!-- 🌸 Flower loader animation -->
+        <div class="flower">
+          <div class="petal petal1"></div>
+          <div class="petal petal2"></div>
+          <div class="petal petal3"></div>
+          <div class="petal petal4"></div>
+          <div class="petal petal5"></div>
+          <div class="petal petal6"></div>
+          <div class="petal petal7"></div>
+          <div class="petal petal8"></div>
+          <div class="center"></div>
+        </div>
       </div>
 
       <div v-else class="strawberry-container">
@@ -36,13 +46,9 @@
           :key="card.id"
           @click="openPlantOnDiary(card)"
           role="button"
-          style="cursor:pointer"
+          style="cursor: pointer"
         >
-          <img 
-            :src="card.image" 
-            :alt="card.label"
-            @error="handleImageError"
-          />
+          <img :src="card.image" :alt="card.label" @error="handleImageError" />
           <p>{{ card.label }}</p>
         </div>
 
@@ -53,7 +59,10 @@
             </div>
             <h3>No Strawberry Plants Yet</h3>
             <p class="empty-text">Start your strawberry garden journey!</p>
-            <button class="add-plant-btn" @click="$router.push({ name: 'MyDiary' })">
+            <button
+              class="add-plant-btn"
+              @click="$router.push({ name: 'MyDiary' })"
+            >
               <span class="emoji">🌱</span>
               Add Your First Plant
             </button>
@@ -84,31 +93,45 @@
 </template>
 
 <script>
-import { Carousel, Slide } from "vue3-carousel";
-import "vue3-carousel/dist/carousel.css";
 import "../styles/Home.css";
 
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../firebase";
 import { getPlants } from "../scripts/plantService.js";
-import { getFirestore, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import {
+  getFirestore,
+  collection,
+  query,
+  orderBy,
+  limit,
+  getDocs,
+} from "firebase/firestore";
 
 export default {
   name: "Home",
-  components: { Carousel, Slide },
   data() {
     return {
-      banners: [
-        { image: "/tips_banner.png", label: "Strawberry 1" },
-        { image: "/tips_banner.png", label: "Strawberry 2" },
-        { image: "/tips_banner.png", label: "Strawberry 3" },
-      ],
       cards: [
-        { label: "Harvest", image: "/strawberries.png" },
-        { label: "Recipe", image: "/strawberries.png" },
-        { label: "Storage", image: "/strawberries.png" },
-        { label: "Caring", image: "/strawberries.png" },
-        { label: "Watering", image: "/strawberries.png" },
+        {
+          label: "Harvest",
+          image: "/harvest.png",
+          action: "harvest",
+        },
+        {
+          label: "Recipe",
+          image: "/jam-image.png",
+          action: "recipe",
+        },
+        {
+          label: "Storage",
+          image: "/storage.png",
+          action: "storage",
+        },
+        {
+          label: "Caring",
+          image: "/caring.png",
+          action: "care",
+        },
       ],
       plants: [],
       plantsLoading: true,
@@ -142,28 +165,29 @@ export default {
       try {
         this.plantsLoading = true;
         const plantsData = await getPlants();
-        
+
         // Load latest photo for each plant from uploads subcollection
         const db = getFirestore();
         for (const plant of plantsData) {
           try {
-            const uploadsRef = collection(db, 'plants', plant.id, 'uploads');
+            const uploadsRef = collection(db, "plants", plant.id, "uploads");
             const latestPhotoQuery = query(
               uploadsRef,
-              orderBy('timestamp', 'desc'),
+              orderBy("timestamp", "desc"),
               limit(1)
             );
-            
+
             const photoSnapshot = await getDocs(latestPhotoQuery);
             if (!photoSnapshot.empty) {
               const latestPhoto = photoSnapshot.docs[0].data();
-              plant.latest_photo = latestPhoto.image_url || latestPhoto.photo_url;
+              plant.latest_photo =
+                latestPhoto.image_url || latestPhoto.photo_url;
             }
           } catch (photoError) {
             console.log(`No photos found for plant ${plant.id}`);
           }
         }
-        
+
         this.plants = plantsData;
       } catch (e) {
         console.error("Failed to load plants on Home:", e);
@@ -182,6 +206,16 @@ export default {
         name: "MyDiary",
         query: { plantId: card.id, plantName: card.label },
       });
+    },
+
+    handleTipCardClick(item) {
+      if (item.action) {
+        // Navigate to Tips page with section parameter
+        this.$router.push({
+          path: "/tips",
+          query: { section: item.action },
+        });
+      }
     },
   },
 };
