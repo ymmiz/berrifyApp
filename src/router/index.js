@@ -18,6 +18,8 @@ import AdminPage from '@/views/AdminPage.vue'
 import { auth } from '@/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
 import AnalysisView from '@/views/AnalysisView.vue'
+import PhotoListHardware from '@/views/PhotoListHardware.vue'
+import HardwareHarvest from '@/views/HardwareHarvest.vue'
 
 const routes = [
 
@@ -77,6 +79,11 @@ const routes = [
     component: PhotoList
   },
   {
+    path: '/photohardware',
+    name: 'PhotoListHardware',
+    component: PhotoListHardware
+  },
+  {
     path: '/profile',
     name: 'UserProfile',
     component: UserProfile
@@ -101,6 +108,11 @@ const routes = [
     path: '/analysis',
     name: 'AnalysisView',
     component: AnalysisView,
+  },
+  {
+    path: '/hardwareharvest',
+    name: 'HardwareHarvest',
+    component: HardwareHarvest,
   }
 ]
 const router = createRouter({

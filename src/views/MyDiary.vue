@@ -184,13 +184,13 @@
                   }"
                 >
                   <i class="bi bi-scissors"></i>
-                  I want to harvest now
+                  Harvest Now
                 </router-link>
                 <router-link
                   v-else
                   class="harvest-btn"
                   :to="{
-                    name: 'PhoneHarvest',
+                    name: 'HardwareHarvest',
                     query: {
                       plantId: plant.id,
                       plantName: plant.name,
@@ -199,7 +199,7 @@
                   }"
                 >
                   <i class="bi bi-scissors"></i>
-                  I want to harvest now
+                  Harvest Now
                 </router-link>
               </div>
             </div>
@@ -627,15 +627,30 @@ export default {
     },
 
     /* ------------------------------ UI helpers ----------------------------- */
+// In the methods section, replace the existing viewPlantPhotos method:
+
     viewPlantPhotos(plant) {
-      this.$router.push({
-        path: "/photolist",
-        query: {
-          plantId: plant.id,
-          plantName: plant.name,
-          mode: plant.mode || "phone",
-        },
-      });
+      if (plant.mode === 'hardware') {
+        // Route to hardware photos view
+        this.$router.push({
+          name: 'PhotoListHardware', // or path: '/photos/hardware'
+          query: {
+            plantId: plant.id,
+            plantName: plant.name,
+            mode: plant.mode
+          },
+        });
+      } else {
+        // Route to phone photos view (default)
+        this.$router.push({
+          name: 'PhotoList', // or path: '/photos/phone'
+          query: {
+            plantId: plant.id,
+            plantName: plant.name,
+            mode: plant.mode || 'phone'
+          },
+        });
+      }
     },
 
     goToToday() {

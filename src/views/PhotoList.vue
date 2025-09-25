@@ -27,7 +27,7 @@
             <div v-for="photo in dayGroup.photos" :key="photo.id" class="photo-item">
               <div class="photo-card" @click="viewPhoto(photo)">
                 <div class="card-image">
-                  <img :src="photo.url" :alt="photo.filename" />
+                  <img :src="photo.url" :alt="'Strawberry photo'" />
                   <div class="image-overlay">
                     <i class="bi bi-eye-fill"></i>
                   </div>
@@ -37,7 +37,6 @@
                   </div>
                 </div>
                 <div class="card-content">
-                  <div class="photo-title">{{ photo.filename }}</div>
                   <div class="photo-details">
                     <span class="upload-time">{{ formatTime(photo.uploadDate) }}</span>
                     <button class="delete-btn" @click.stop="deletePhoto(photo)" title="Delete photo">
@@ -72,7 +71,7 @@
     <div v-if="selectedPhoto" class="photo-modal" @click="closePhotoViewer">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
-          <h3>{{ selectedPhoto.filename }}</h3>
+          <h3>Photo Details</h3>
           <div class="modal-actions">
             <button class="modal-delete-btn" @click="deletePhoto(selectedPhoto)" title="Delete photo">
               <i class="bi bi-trash3-fill"></i>
@@ -89,11 +88,11 @@
             <div class="image-label" :class="{ 'processed': selectedPhoto.hasAnalysis }">
               {{ selectedPhoto.hasAnalysis ? 'Ripeness Analysis' : 'Original Photo' }}
             </div>
-            <img :src="selectedPhoto.url" :alt="selectedPhoto.filename" />
+            <img :src="selectedPhoto.url" :alt="'Strawberry photo'" />
           </div>
           <div v-if="selectedPhoto.hasAnalysis && selectedPhoto.originalUrl" class="image-container">
             <div class="image-label">Original</div>
-            <img :src="selectedPhoto.originalUrl" :alt="selectedPhoto.filename + ' original'" />
+            <img :src="selectedPhoto.originalUrl" :alt="'Original strawberry photo'" />
           </div>
         </div>
  
@@ -172,7 +171,6 @@ export default {
             id: docSnap.id,
             url: data.annotated_image || data.image_url, // Use processed image with ripeness results if available
             originalUrl: data.image_url, // Keep original for reference
-            filename: this.extractFilename(data.storage_path) || `photo_${docSnap.id}.jpg`,
             uploadDate: data.timestamp?.toDate() || new Date(),
             source: data.source || 'unknown',
             storage_path: data.storage_path,
@@ -186,14 +184,8 @@ export default {
       }
     },
  
-    extractFilename(path) {
-      if (!path) return null
-      const parts = path.split('/')
-      return parts[parts.length - 1].replace(/^\d+_/, '')
-    },
- 
     async deletePhoto(photo) {
-      if (!confirm(`Are you sure you want to delete "${photo.filename}"?`)) return
+      if (!confirm('Are you sure you want to delete this photo?')) return
       try {
         const db = getFirestore()
         const storage = getStorage()
@@ -435,22 +427,15 @@ export default {
   flex: 1;
   padding: 20px;
   display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.photo-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1e293b;
-  margin-bottom: 8px;
-  word-break: break-word;
+  align-items: center;
+  justify-content: center;
 }
 
 .photo-details {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  width: 100%;
 }
 
 .upload-time {
@@ -650,13 +635,6 @@ export default {
   padding: 4px 8px;
   border-radius: 8px;
   text-transform: capitalize;
-}
-
-.photo-name {
-  font-size: 14px;
-  color: #1e293b;
-  font-weight: 500;
-  word-break: break-word;
 }
 
 .delete-photo-btn {
@@ -959,7 +937,9 @@ export default {
 }
 
 .image-showcase img {
-  max-width: 350px;
+  width: 350px;
+  height: 350px;
+  object-fit: contain;
   border-radius: 20px;
   box-shadow: 0 15px 50px rgba(0,0,0,0.2), 0 1px 0 rgba(255,255,255,0.5) inset;
   border: 3px solid rgba(22, 160, 133, 0.15);
@@ -1039,11 +1019,6 @@ export default {
   
   .card-content {
     padding: 16px;
-  }
-  
-  .photo-title {
-    font-size: 15px;
-    margin-bottom: 6px;
   }
   
   .upload-time {

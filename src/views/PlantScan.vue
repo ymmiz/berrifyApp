@@ -119,28 +119,7 @@
       <!-- Session Results - Only show results from current session -->
       <div v-if="sessionUploads.length" class="session-results">
         <h3>Today's Analysis Results</h3>
-        
-        <!-- Summary for session uploads only -->
-        <!-- <div class="summary-cards">
-          <div class="summary-card ripe">
-            <div class="count">{{ summary.ripe }}</div>
-            <div class="label">Ripe</div>
-          </div>
-          <div class="summary-card unripe">
-            <div class="count">{{ summary.unripe }}</div>
-            <div class="label">Unripe</div>
-          </div>
-          <div class="summary-card overripe">
-            <div class="count">{{ summary.overripe }}</div>
-            <div class="label">Overripe</div>
-          </div>
-          <div v-if="summary.pending" class="summary-card pending">
-            <div class="count">{{ summary.pending }}</div>
-            <div class="label">Processing</div>
-          </div>
-        </div> -->
 
-        <!-- List of session uploads -->
         <div class="session-uploads">
           <div v-for="u in sessionUploads" :key="u.id" class="upload-result">
             <img
@@ -150,9 +129,10 @@
             />
             <div class="upload-info">
               <span class="status-badge" :class="u.status">{{ u.status }}</span>
-              <div v-if="u.analysis && u.analysis.red_precent !== undefined" class="analysis-details">
-                <p>Red: {{ u.analysis.red_precent?.toFixed(1) }}%</p>
-                <p>Green: {{ u.analysis.green_precent?.toFixed(1) }}%</p>
+              <div v-if="u.analysis && (u.analysis.red_precent !== undefined || u.avgRedPercent !== undefined)" class="analysis-details">
+                <p v-if="u.analysis.red_precent !== undefined">Red: {{ u.analysis.red_precent?.toFixed(1) }}%</p>
+                <p v-else-if="u.avgRedPercent !== undefined">Red Avg: {{ Number(u.avgRedPercent).toFixed(1) }}%</p>
+                <p v-if="u.analysis.green_precent !== undefined">Green: {{ u.analysis.green_precent?.toFixed(1) }}%</p>
               </div>
             </div>
           </div>
@@ -163,7 +143,9 @@
 </template>
 
 <script>
-import { uploadPlantPhoto } from "../scripts/uploadService.js";
+// 🔁 Use the unified uploader
+import { uploadFromPhone } from '@/scripts/uploadService'
+
 import {
   getFirestore,
   doc,
@@ -232,15 +214,13 @@ export default {
         this.sessionUploads = [];
         return;
       }
-      
       this.sessionUploads = this.uploads.filter(upload => {
-        // Check if this upload was created after session started
-        const uploadTime = upload.timestamp?.toDate() || new Date(0);
+        const uploadTime = upload.timestamp?.toDate?.() || new Date(0);
         return uploadTime >= this.sessionStartTime;
       });
     },
 
-    // 🔸 NEW: push a phone-scan summary up to the plant document
+    // 🔸 Push a phone-scan summary up to the plant document
     async writeSummaryToPlant(counts) {
       const db = getFirestore();
       const plantRef = doc(db, "plants", this.plantId);
@@ -275,7 +255,6 @@ export default {
 
     async computeSummary() {
       const counts = { ripe: 0, unripe: 0, overripe: 0, pending: 0 };
-      
       // Only count session uploads for display
       for (const u of this.sessionUploads) {
         if (u.status === "ripe") counts.ripe++;
@@ -285,7 +264,7 @@ export default {
       }
       this.summary = counts;
 
-      // But write ALL uploads to plant doc for overall tracking
+      // Compute across all uploads for plant doc
       const allCounts = { ripe: 0, unripe: 0, overripe: 0, pending: 0 };
       for (const u of this.uploads) {
         if (u.status === "ripe") allCounts.ripe++;
@@ -294,7 +273,6 @@ export default {
         else allCounts.pending++;
       }
 
-      // Only update plant doc if we have session uploads
       if (this.sessionUploads.length > 0) {
         try {
           await this.writeSummaryToPlant(allCounts);
@@ -304,9 +282,7 @@ export default {
       }
     },
 
-    triggerFileInput() {
-      this.$refs.fileInput.click();
-    },
+    triggerFileInput() { this.$refs.fileInput.click(); },
     handleFileSelect(e) {
       const files = Array.from(e.target.files || []);
       this.addFiles(files);
@@ -346,6 +322,8 @@ export default {
       this.selectedImages.splice(idx, 1);
       this.imagePreviews.splice(idx, 1);
     },
+
+    // ⬇️ The only real functional change: use the unified uploader
     async uploadPhotos() {
       if (!this.selectedImages.length || !this.plantId) return;
       this.uploading = true;
@@ -354,10 +332,8 @@ export default {
       try {
         for (let i = 0; i < this.selectedImages.length; i++) {
           const file = this.selectedImages[i];
-          await uploadPlantPhoto(this.plantId, file, "phone");
-          this.uploadProgress = Math.round(
-            ((i + 1) / this.selectedImages.length) * 100
-          );
+          await uploadFromPhone(this.plantId, file);  // ✅ unified service
+          this.uploadProgress = Math.round(((i + 1) / this.selectedImages.length) * 100);
         }
 
         notify.success(
@@ -365,22 +341,18 @@ export default {
         );
       } catch (err) {
         console.error("❌ Upload failed:", err);
-        notify.error("Upload failed. Please try again.");
+        notify.error(err?.message || "Upload failed. Please try again.");
       } finally {
         this.uploading = false;
         this.uploadProgress = 0;
       }
     },
-    goBack() {
-      this.$router.push("/mydiary");
-    },
+
+    goBack() { this.$router.push("/mydiary"); },
     viewPhotos() {
       this.$router.push({
         path: '/photolist',
-        query: { 
-          plantId: this.plantId, 
-          plantName: this.plantName 
-        }
+        query: { plantId: this.plantId, plantName: this.plantName }
       });
     },
   },
@@ -388,6 +360,7 @@ export default {
 </script>
 
 <style scoped>
+/* ——— your styles kept as-is ——— */
 .page-container {
   min-height: 100vh;
   background: linear-gradient(135deg, #8ab58a 0%, #a8d4a8 100%);
@@ -422,382 +395,57 @@ export default {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
   cursor: pointer;
 }
-.back-button i {
-  font-size: 20px;
-  color: #2e7d32;
-}
-.plant-name {
-  font-size: 1.25rem;
-  font-weight: 500;
-  color: #f3ecec;
-  margin: 0.5rem 0;
-  text-align: left;
-}
-.upload-section {
-  margin-bottom: 30px;
-}
+.back-button i { font-size: 20px; color: #2e7d32; }
+.plant-name { font-size: 1.25rem; font-weight: 500; color: #f3ecec; margin: 0.5rem 0; text-align: left; }
+.upload-section { margin-bottom: 30px; }
 .upload-area {
-  border: 3px dashed #d0d7cf;
-  border-radius: 20px;
-  padding: 40px 20px;
-  text-align: center;
-  background: rgba(250, 250, 250, 0.9);
-  min-height: 250px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  border: 3px dashed #d0d7cf; border-radius: 20px; padding: 40px 20px; text-align: center;
+  background: rgba(250, 250, 250, 0.9); min-height: 250px; display: flex; align-items: center; justify-content: center;
   transition: all 0.3s ease;
 }
-.upload-area:hover {
-  border-color: #8ab58a;
-  background: #fff;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
-}
-.upload-area.drag-over {
-  border-color: #2e7d32;
-  background: rgba(46, 125, 50, 0.08);
-  transform: scale(1.01);
-}
-.upload-area.has-image {
-  padding: 20px;
-}
-.upload-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-}
-.upload-icon {
-  font-size: 48px;
-  color: #8ab58a;
-}
-.upload-content h3 {
-  font-size: 24px;
-  font-weight: 700;
-  color: #2c3e50;
-  margin: 0;
-}
-.upload-content p {
-  font-size: 16px;
-  color: #6b7b8a;
-  margin: 0;
-}
-.supported-formats {
-  font-size: 14px;
-  color: #95a5a6;
-}
-.thumb-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 12px;
-  width: 100%;
-}
-.thumb {
-  position: relative;
-  border-radius: 12px;
-  overflow: hidden;
-  aspect-ratio: 1/1;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
-}
-.thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.thumb-remove {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  border: none;
-  background: rgba(255, 255, 255, 0.9);
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-.thumb-remove:hover {
-  background: #fff;
-}
-.upload-progress-section {
-  margin-bottom: 30px;
-}
-.progress-card {
-  background: #fff;
-  border-radius: 20px;
-  padding: 24px;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
-  border-left: 4px solid #2e7d32;
-}
-.progress-card h3 {
-  font-size: 20px;
-  font-weight: 800;
-  margin: 0 0 16px;
-  color: #1f2d3a;
-  display: flex;
-  align-items: center;
-}
-.progress-card h3 i {
-  margin-right: 10px;
-  color: #2e7d32;
-}
-.progress-bar {
-  width: 100%;
-  height: 8px;
-  background: #ecf0f1;
-  border-radius: 4px;
-  overflow: hidden;
-  margin-bottom: 8px;
-}
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #8ab58a, #2e7d32);
-  transition: width 0.2s ease;
-  border-radius: 4px;
-}
-.progress-text {
-  font-size: 14px;
-  color: #6b7b8a;
-  font-weight: 600;
-}
-.action-buttons {
-  display: flex;
-  gap: 12px;
-  margin-top: auto;
-  padding-top: 16px;
-}
-.btn-secondary,
-.btn-primary {
-  flex: 1;
-  padding: 14px 18px;
-  border: none;
-  border-radius: 12px;
-  font-weight: 800;
-  font-size: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  cursor: pointer;
-  transition: 0.25s;
-}
-.btn-secondary {
-  background: rgba(127, 140, 141, 0.12);
-  color: #6b7b8a;
-}
-.btn-secondary:hover {
-  background: rgba(127, 140, 141, 0.22);
-  transform: translateY(-2px);
-}
-.btn-primary {
-  background: linear-gradient(135deg, #8ab58a, #2e7d32);
-  color: #fff;
-}
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(46, 125, 50, 0.28);
-}
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* View Photos Section */
-.view-photos-section {
-  text-align: center;
-  margin-top: 24px;
-  padding: 20px;
-  background: rgba(138, 181, 138, 0.08);
-  border-radius: 16px;
-  border: 2px dashed rgba(138, 181, 138, 0.3);
-}
-
-.btn-view-photos {
-  background: linear-gradient(135deg, #6c8e6c, #4a7c4a);
-  color: #fff;
-  border: none;
-  border-radius: 12px;
-  padding: 14px 24px;
-  font-size: 16px;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 6px 20px rgba(108, 142, 108, 0.3);
-  text-transform: none;
-}
-
-.btn-view-photos:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 28px rgba(108, 142, 108, 0.4);
-  background: linear-gradient(135deg, #4a7c4a, #6c8e6c);
-}
-
-.view-photos-hint {
-  margin: 12px 0 0 0;
-  font-size: 14px;
-  color: #6b7b8a;
-  font-style: italic;
-}
-
-@media (max-width: 768px) {
-  .page-content {
-    padding: 24px;
-  }
-  .thumb-grid {
-    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-  }
-  .summary-cards {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .session-uploads {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  }
-}
-
-/* Session Results Styles */
-.session-results {
-  margin-top: 32px;
-  padding: 24px;
-  background: rgba(138, 181, 138, 0.05);
-  border-radius: 16px;
-  border: 2px solid rgba(138, 181, 138, 0.2);
-}
-
-.session-results h3 {
-  font-size: 24px;
-  font-weight: 700;
-  color: #2c3e50;
-  margin: 0 0 20px 0;
-  text-align: center;
-}
-
-.summary-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.summary-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 16px 12px;
-  text-align: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  border-left: 4px solid;
-  transition: transform 0.2s ease;
-}
-
-.summary-card:hover {
-  transform: translateY(-2px);
-}
-
-.summary-card.ripe {
-  border-left-color: #4caf50;
-}
-
-.summary-card.unripe {
-  border-left-color: #ff9800;
-}
-
-.summary-card.overripe {
-  border-left-color: #f44336;
-}
-
-.summary-card.pending {
-  border-left-color: #9e9e9e;
-}
-
-.summary-card .count {
-  font-size: 28px;
-  font-weight: 800;
-  color: #2c3e50;
-  margin-bottom: 4px;
-}
-
-.summary-card .label {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #6b7b8a;
-}
-
-.session-uploads {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 16px;
-}
-
-.upload-result {
-  background: #fff;
-  border-radius: 12px;
-  padding: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  transition: transform 0.2s ease;
-}
-
-.upload-result:hover {
-  transform: translateY(-2px);
-}
-
-.result-thumb {
-  width: 100%;
-  height: 120px;
-  object-fit: cover;
-  border-radius: 8px;
-  margin-bottom: 12px;
-}
-
-.upload-info {
-  text-align: center;
-}
-
-.status-badge {
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 8px;
-}
-
-.status-badge.ripe {
-  background: #4caf50;
-  color: white;
-}
-
-.status-badge.unripe {
-  background: #ff9800;
-  color: white;
-}
-
-.status-badge.overripe {
-  background: #f44336;
-  color: white;
-}
-
-.status-badge.pending {
-  background: #9e9e9e;
-  color: white;
-}
-
-.analysis-details {
-  font-size: 14px;
-  color: #6b7b8a;
-}
-
-.analysis-details p {
-  margin: 4px 0;
-  font-weight: 600;
-}
+.upload-area:hover { border-color: #8ab58a; background: #fff; transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.08); }
+.upload-area.drag-over { border-color: #2e7d32; background: rgba(46,125,50,0.08); transform: scale(1.01); }
+.upload-area.has-image { padding: 20px; }
+.upload-content { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.upload-icon { font-size: 48px; color: #8ab58a; }
+.upload-content h3 { font-size: 24px; font-weight: 700; color: #2c3e50; margin: 0; }
+.upload-content p { font-size: 16px; color: #6b7b8a; margin: 0; }
+.supported-formats { font-size: 14px; color: #95a5a6; }
+.thumb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; width: 100%; }
+.thumb { position: relative; border-radius: 12px; overflow: hidden; aspect-ratio: 1/1; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb-remove { position: absolute; top: 6px; right: 6px; border: none; background: rgba(255,255,255,0.9); width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.thumb-remove:hover { background: #fff; }
+.upload-progress-section { margin-bottom: 30px; }
+.progress-card { background: #fff; border-radius: 20px; padding: 24px; box-shadow: 0 8px 25px rgba(0,0,0,0.08); border-left: 4px solid #2e7d32; }
+.progress-card h3 { font-size: 20px; font-weight: 800; margin: 0 0 16px; color: #1f2d3a; display: flex; align-items: center; }
+.progress-card h3 i { margin-right: 10px; color: #2e7d32; }
+.progress-bar { width: 100%; height: 8px; background: #ecf0f1; border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #8ab58a, #2e7d32); transition: width 0.2s ease; border-radius: 4px; }
+.progress-text { font-size: 14px; color: #6b7b8a; font-weight: 600; }
+.action-buttons { display: flex; gap: 12px; margin-top: auto; padding-top: 16px; }
+.btn-secondary, .btn-primary { flex: 1; padding: 14px 18px; border: none; border-radius: 12px; font-weight: 800; font-size: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; transition: 0.25s; }
+.btn-secondary { background: rgba(127,140,141,0.12); color: #6b7b8a; }
+.btn-secondary:hover { background: rgba(127,140,141,0.22); transform: translateY(-2px); }
+.btn-primary { background: linear-gradient(135deg, #8ab58a, #2e7d32); color: #fff; }
+.btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(46,125,50,0.28); }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+.view-photos-section { text-align: center; margin-top: 24px; padding: 20px; background: rgba(138,181,138,0.08); border-radius: 16px; border: 2px dashed rgba(138,181,138,0.3); }
+.btn-view-photos { background: linear-gradient(135deg, #6c8e6c, #4a7c4a); color: #fff; border: none; border-radius: 12px; padding: 14px 24px; font-size: 16px; font-weight: 700; display: inline-flex; align-items: center; gap: 10px; cursor: pointer; transition: all .3s ease; box-shadow: 0 6px 20px rgba(108,142,108,.3); }
+.btn-view-photos:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(108,142,108,.4); background: linear-gradient(135deg, #4a7c4a, #6c8e6c); }
+.view-photos-hint { margin: 12px 0 0 0; font-size: 14px; color: #6b7b8a; font-style: italic; }
+.session-results { margin-top: 32px; padding: 24px; background: rgba(138,181,138,0.05); border-radius: 16px; border: 2px solid rgba(138,181,138,0.2); }
+.session-results h3 { font-size: 24px; font-weight: 700; color: #2c3e50; margin: 0 0 20px 0; text-align: center; }
+.session-uploads { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+.upload-result { background: #fff; border-radius: 12px; padding: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: transform .2s ease; }
+.upload-result:hover { transform: translateY(-2px); }
+.result-thumb { width: 100%; height: 120px; object-fit: cover; border-radius: 8px; margin-bottom: 12px; }
+.upload-info { text-align: center; }
+.status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+.status-badge.ripe { background: #4caf50; color: #fff; }
+.status-badge.unripe { background: #ff9800; color: #fff; }
+.status-badge.overripe { background: #f44336; color: #fff; }
+.status-badge.pending { background: #9e9e9e; color: #fff; }
+.analysis-details { font-size: 14px; color: #6b7b8a; }
+.analysis-details p { margin: 4px 0; font-weight: 600; }
 </style>

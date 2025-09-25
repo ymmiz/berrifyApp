@@ -8,11 +8,11 @@ import { getFunctions /*, connectFunctionsEmulator*/ } from "firebase/functions"
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: "strawberry-plant-ac866.firebaseapp.com",
-  projectId: "strawberry-plant-ac866",
-  storageBucket: "strawberry-plant-ac866.firebasestorage.app",
-  messagingSenderId: "597144290332",
-  appId: "1:597144290332:web:c5176a6da33274319c4bd9",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 // 1) init app FIRST
